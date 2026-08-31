@@ -19,9 +19,11 @@ config/sources.local.php
 coverage/
 .phpunit.cache/
 
+# Local PC diagnostic reports are private and unrelated to the app
+PC_*DIAGNOSTIC*.md
+
 # Editors and operating systems
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-

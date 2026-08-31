@@ -3,7 +3,90 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
+require_once __DIR__ . '/../src/market_bootstrap.php';
 require_once __DIR__ . '/../src/source_status_data.php';
+
+function status_time(?string $timestamp): string
+{
+    if (!$timestamp) {
+        return 'Not yet';
+    }
+    return (new DateTimeImmutable($timestamp, new DateTimeZone('UTC')))
+        ->setTimezone(new DateTimeZone(date_default_timezone_get()))
+        ->format('d M H:i');
+}
+
+function duration_label(?float $milliseconds): string
+{
+    if ($milliseconds === null) {
+        return 'Inactive';
+    }
+    return $milliseconds >= 1000
+        ? number_format($milliseconds / 1000, 1) . ' s'
+        : number_format($milliseconds, 0) . ' ms';
+}
+
+$providerHealth = market_repository()->providerHealth();
+$sourceStatuses = array_values(array_filter(
+    $sourceStatuses,
+    static fn (array $source): bool => $source['name'] !== 'Market data provider',
+));
+$providerDefinitions = [
+    'yahoo_chart' => ['name' => 'Yahoo chart endpoint', 'type' => 'Public JSON · unofficial'],
+    'coingecko' => ['name' => 'CoinGecko Public API', 'type' => 'Keyless public API'],
+];
+foreach ($providerDefinitions as $key => $definition) {
+    $health = $providerHealth[$key] ?? null;
+    $status = $health['status'] ?? 'warning';
+    $sourceStatuses[] = [
+        'status' => $status,
+        'label' => $health === null ? 'Not checked' : match ($status) {
+            'healthy' => 'Healthy',
+            'down' => 'Unavailable',
+            default => 'Partial',
+        },
+        'name' => $definition['name'],
+        'geography' => 'Global',
+        'section' => 'Finance',
+        'type' => $definition['type'],
+        'last_success' => status_time($health['last_success'] ?? null),
+        'detail' => $health['detail'] ?? 'Waiting for the first live finance refresh.',
+    ];
+}
+
+$sourceSummary = [
+    'healthy' => count(array_filter($sourceStatuses, static fn (array $source): bool => $source['status'] === 'healthy')),
+    'warning' => count(array_filter($sourceStatuses, static fn (array $source): bool => $source['status'] === 'warning')),
+    'down' => count(array_filter($sourceStatuses, static fn (array $source): bool => $source['status'] === 'down')),
+    'total' => count($sourceStatuses),
+];
+
+$activityMetrics = (new TelemetryRepository(Database::connection()))->metrics($analyticsSections);
+$metricTotal = static fn (string $key): int => array_sum(array_column($activityMetrics, $key));
+$qwenValues = static function (string $key) use ($activityMetrics): array {
+    return array_values(array_filter(
+        array_column($activityMetrics, $key),
+        static fn (mixed $value): bool => $value !== null,
+    ));
+};
+$average = static fn (array $values): ?float => $values === [] ? null : array_sum($values) / count($values);
+$refreshTotal = $metricTotal('refresh_total');
+$refresh7d = $metricTotal('refresh_7d');
+$linksTotal = $metricTotal('links_total');
+$links7d = $metricTotal('links_7d');
+$scansTotal = $metricTotal('scans_total');
+$scans7d = $metricTotal('scans_7d');
+$apiTotal = $metricTotal('api_total');
+$api7d = $metricTotal('api_7d');
+$qwenTotal = $average($qwenValues('qwen_total_ms'));
+$qwen7d = $average($qwenValues('qwen_7d_ms'));
+$lastProviderSuccesses = [];
+foreach ($providerHealth as $health) {
+    if (is_array($health) && is_string($health['last_success'] ?? null)) {
+        $lastProviderSuccesses[] = $health['last_success'];
+    }
+}
+$lastFinanceCheck = $lastProviderSuccesses === [] ? null : max($lastProviderSuccesses);
 ?>
 <!doctype html>
 <html lang="en" data-theme="light">
@@ -39,12 +122,12 @@ require_once __DIR__ . '/../src/source_status_data.php';
                 <h1>Source status</h1>
                 <p>Distinguish “nothing important happened” from “the app could not check.” Previous successful dashboard data will remain visible after a failed refresh.</p>
             </div>
-            <button class="button button--primary" type="button" id="check-sources"><span aria-hidden="true">↻</span> Check all sources</button>
+            <button class="button button--primary" type="button" id="check-sources"><span aria-hidden="true">↻</span> Refresh finance providers</button>
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 1 · Status demonstration</strong>
-            <span>These states illustrate the future monitoring interface; they are not live source checks.</span>
+            <strong>Stage 2 · Mixed status</strong>
+            <span>Yahoo and CoinGecko rows are live. News, Reddit, X, Italy, and local rows remain demonstration states until their ingestion stages.</span>
         </div>
 
         <section class="status-summary" aria-label="Source summary">
@@ -54,22 +137,22 @@ require_once __DIR__ . '/../src/source_status_data.php';
             <div><strong><?= e($sourceSummary['total']) ?></strong><span>Configured</span></div>
         </section>
 
-        <section class="analytics-panel" data-activity-dashboard>
+        <section class="analytics-panel" data-activity-dashboard data-server-metrics="true">
             <div class="analytics-panel__header">
                 <div>
                     <p class="overline">Activity and processing</p>
                     <h2>Usage telemetry</h2>
                 </div>
-                <p>Refreshes and opened links are counted locally now. Backend scans, API calls, and Qwen timing activate in later stages.</p>
+                <p>SQLite stores refreshes, opened links, and provider calls. PHP news scans activate in Stage 3; Qwen timing activates in Stage 5.</p>
             </div>
 
             <div class="analytics-cards">
-                <article><span>Total refreshes</span><strong data-summary="refresh-total">0</strong><small><span data-summary="refresh-7d">0</span> in last 7 days</small></article>
-                <article><span>Refresh average</span><strong><span data-summary="refresh-daily">0.0</span>/day</strong><small>Rolling last 7 days</small></article>
-                <article><span>Links opened</span><strong data-summary="links-total">0</strong><small><span data-summary="links-7d">0</span> in last 7 days</small></article>
-                <article><span>PHP source scans</span><strong>0</strong><small>Begins with live ingestion</small></article>
-                <article><span>External API calls</span><strong>0</strong><small>Begins with live providers</small></article>
-                <article><span>Qwen processing</span><strong>Inactive</strong><small>Timing begins in Stage 5</small></article>
+                <article><span>Total refreshes</span><strong><?= e($refreshTotal) ?></strong><small><?= e($refresh7d) ?> in last 7 days</small></article>
+                <article><span>Refresh average</span><strong><?= e(number_format($refresh7d / 7, 1)) ?>/day</strong><small>Rolling last 7 days</small></article>
+                <article><span>Links opened</span><strong><?= e($linksTotal) ?></strong><small><?= e($links7d) ?> in last 7 days</small></article>
+                <article><span>PHP source scans</span><strong><?= e($scansTotal) ?></strong><small><?= e($scans7d) ?> in last 7 days</small></article>
+                <article><span>External API calls</span><strong><?= e($apiTotal) ?></strong><small><?= e($api7d) ?> in last 7 days</small></article>
+                <article><span>Qwen processing</span><strong><?= e(duration_label($qwenTotal)) ?></strong><small><?= e(duration_label($qwen7d)) ?> average in last 7 days</small></article>
             </div>
 
             <div class="source-table-wrap analytics-table-wrap">
@@ -87,20 +170,21 @@ require_once __DIR__ . '/../src/source_status_data.php';
                     </thead>
                     <tbody>
                         <?php foreach ($analyticsSections as $analyticsSection): ?>
+                            <?php $metric = $activityMetrics[$analyticsSection['key']]; ?>
                             <tr data-analytics-section="<?= e($analyticsSection['key']) ?>">
                                 <td><strong><?= e($analyticsSection['name']) ?></strong></td>
-                                <td><span data-metric="refresh-total">0</span> / <span data-metric="refresh-7d">0</span></td>
-                                <td><span data-metric="refresh-daily">0.0</span></td>
-                                <td><span data-metric="links-total">0</span> / <span data-metric="links-7d">0</span></td>
-                                <td><span class="metric-inactive">0 / 0</span></td>
-                                <td><span class="metric-inactive">0 / 0</span></td>
-                                <td><span class="metric-inactive">Not active</span></td>
+                                <td><?= e($metric['refresh_total']) ?> / <?= e($metric['refresh_7d']) ?></td>
+                                <td><?= e(number_format($metric['refresh_7d'] / 7, 1)) ?></td>
+                                <td><?= e($metric['links_total']) ?> / <?= e($metric['links_7d']) ?></td>
+                                <td><?= e($metric['scans_total']) ?> / <?= e($metric['scans_7d']) ?></td>
+                                <td><?= e($metric['api_total']) ?> / <?= e($metric['api_7d']) ?></td>
+                                <td><?= e(duration_label($metric['qwen_total_ms'])) ?> / <?= e(duration_label($metric['qwen_7d_ms'])) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
-            <p class="analytics-footnote">Stage 1 interaction counts are stored only in this browser. From Stage 2 onward, durable totals and seven-day statistics will be calculated from SQLite.</p>
+            <p class="analytics-footnote">Durable totals start with Stage 2 and are stored in the local SQLite database. Browser-only counts from Stage 1 are not imported.</p>
         </section>
 
         <section class="source-table-card">
@@ -109,7 +193,7 @@ require_once __DIR__ . '/../src/source_status_data.php';
                     <p class="overline">Configured coverage</p>
                     <h2>Feeds and public sources</h2>
                 </div>
-                <p>Last mock check: <strong data-source-check-time><?= e(mock_time('-9 minutes')) ?></strong></p>
+                <p>Last live finance success: <strong data-source-check-time><?= e(status_time($lastFinanceCheck)) ?></strong></p>
             </div>
             <div class="source-table-wrap">
                 <table class="source-table">

@@ -301,6 +301,10 @@ a:focus-visible {
     border-top: 5px solid var(--ink);
 }
 
+.dashboard-section--crypto {
+    border-top: 3px solid var(--amber);
+}
+
 .section-heading {
     display: flex;
     align-items: flex-start;
@@ -363,6 +367,11 @@ a:focus-visible {
 .status-dot--working {
     background: var(--amber);
     animation: pulse 900ms ease-in-out infinite alternate;
+}
+
+.status-dot--partial {
+    background: var(--amber);
+    box-shadow: 0 0 0 4px rgba(181, 124, 30, 0.12);
 }
 
 .status-dot--error,

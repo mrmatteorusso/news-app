@@ -3,10 +3,48 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
+require_once __DIR__ . '/../src/market_bootstrap.php';
 require_once __DIR__ . '/../src/dashboard_data.php';
 
 $pageTitle = 'Personal Briefing';
 $dashboardConfig = require __DIR__ . '/../config/dashboard.php';
+
+try {
+    $liveMarketSnapshot = market_snapshot();
+} catch (Throwable $exception) {
+    error_log('Market snapshot error: ' . $exception->getMessage());
+    $liveMarketSnapshot = MarketPresenter::presentSnapshot([
+        'markets' => array_map(
+            static fn (array $instrument): array => ['config' => $instrument, 'quote' => null],
+            market_instruments(),
+        ),
+        'state' => null,
+        'stale' => true,
+        'has_data' => false,
+    ]);
+    $liveMarketSnapshot['warning'] = 'The local finance database could not be opened.';
+    $liveMarketSnapshot['status'] = 'failed';
+}
+
+$markets = $liveMarketSnapshot['markets'];
+$financeStatus = match ($liveMarketSnapshot['status']) {
+    'ready' => 'ready',
+    'partial' => 'partial',
+    'failed' => 'error',
+    default => 'working',
+};
+$financeState = match ($liveMarketSnapshot['status']) {
+    'ready' => $liveMarketSnapshot['stale'] ? 'Live cache ready · refresh recommended' : 'Live data ready',
+    'partial' => 'Live data · some providers unavailable',
+    'failed' => $liveMarketSnapshot['has_data'] ? 'Refresh failed · previous live data retained' : 'Live refresh unavailable',
+    default => 'Waiting for first live refresh',
+};
+$sections['finance'] = array_replace($sections['finance'], [
+    'status' => $financeStatus,
+    'state' => $financeState,
+    'updated' => $liveMarketSnapshot['last_success_display'],
+    'batch' => $liveMarketSnapshot['batch_id'] ?? 'NOT-RUN',
+]);
 ?>
 <!doctype html>
 <html lang="en" data-theme="light">
@@ -50,8 +88,8 @@ $dashboardConfig = require __DIR__ . '/../config/dashboard.php';
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 1 · Demonstration data</strong>
-            <span>All headlines and values below are fictional interface examples. No live API or AI calls are being made.</span>
+            <strong>Stage 2 · Live finance</strong>
+            <span>Market values are live, cached data after the first successful refresh. News headlines remain clearly labelled demonstration examples until feed ingestion in Stage 3.</span>
         </div>
 
         <section class="briefing-meta" aria-label="Briefing status">
@@ -61,11 +99,11 @@ $dashboardConfig = require __DIR__ . '/../config/dashboard.php';
             </div>
             <div>
                 <span class="meta-label">Data status</span>
-                <strong><span class="status-dot status-dot--ready"></span> Mock data current</strong>
+                <strong><span class="status-dot status-dot--<?= e($financeStatus) ?>"></span> Finance <?= e($liveMarketSnapshot['has_data'] ? 'cache available' : 'awaiting first refresh') ?></strong>
             </div>
             <div>
                 <span class="meta-label">Reading target</span>
-                <strong>5 minutes · 8–15 items</strong>
+                <strong>Flexible · all qualifying items</strong>
             </div>
             <div>
                 <span class="meta-label">Background preparation</span>
@@ -92,30 +130,31 @@ $dashboardConfig = require __DIR__ . '/../config/dashboard.php';
             </div>
             <div class="market-grid">
                 <?php foreach ($markets as $market): ?>
-                    <article class="market-card">
+                    <article class="market-card" data-market-key="<?= e($market['key']) ?>">
                         <div class="market-card__top">
                             <div>
                                 <h4><?= e($market['name']) ?></h4>
-                                <span><?= e($market['symbol']) ?></span>
+                                <span><?= e($market['symbol']) ?> · <?= e($market['identifier']) ?></span>
                             </div>
-                            <span class="currency"><?= e($market['currency']) ?></span>
+                            <span class="currency" data-market-field="currency"><?= e($market['currency']) ?></span>
                         </div>
-                        <p class="market-card__value"><?= e($market['value']) ?></p>
+                        <p class="market-card__value" data-market-field="value"><?= e($market['value']) ?></p>
                         <dl>
                             <div>
-                                <dt>Day / 24h</dt>
-                                <dd class="change change--<?= e($market['direction']) ?>"><?= e($market['day']) ?></dd>
+                                <dt data-market-field="basis"><?= e(ucfirst($market['change_basis'])) ?></dt>
+                                <dd class="change change--<?= e($market['direction']) ?>" data-market-field="change"><?= e($market['change']) ?></dd>
                             </div>
                             <div>
                                 <dt>From highest close</dt>
-                                <dd><?= e($market['from_high']) ?></dd>
+                                <dd data-market-field="from-high"><?= e($market['from_high']) ?></dd>
                             </div>
                             <div>
                                 <dt>Highest close</dt>
-                                <dd><?= e($market['high']) ?></dd>
+                                <dd data-market-field="high"><?= e($market['high']) ?></dd>
                             </div>
                         </dl>
-                        <p class="retrieval-time" data-retrieved-at>Retrieved <?= e(mock_time('-22 minutes')) ?></p>
+                        <p class="retrieval-time">Retrieved <span data-market-field="retrieved"><?= e($market['retrieved']) ?></span></p>
+                        <p class="retrieval-time">Provider updated <span data-market-field="provider-updated"><?= e($market['provider_updated']) ?></span> · <span data-market-field="provider"><?= e($market['provider']) ?></span></p>
                     </article>
                 <?php endforeach; ?>
             </div>
@@ -128,6 +167,14 @@ $dashboardConfig = require __DIR__ . '/../config/dashboard.php';
             </div>
             <div class="story-grid">
                 <?php foreach ($financeStories as $story) { render_story($story); } ?>
+            </div>
+        </section>
+
+        <section class="dashboard-section dashboard-section--crypto" data-section="crypto">
+            <?php render_section_header($sections['crypto']); ?>
+            <p class="section-note"><strong>Focus:</strong> consequential Bitcoin, Ethereum, and ADA developments plus industry-wide regulation, security, infrastructure, and adoption changes. Routine price commentary is excluded.</p>
+            <div class="story-grid">
+                <?php foreach ($cryptoStories as $story) { render_story($story); } ?>
             </div>
         </section>
 

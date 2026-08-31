@@ -29,12 +29,27 @@ CREATE TABLE IF NOT EXISTS source_fetches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT NOT NULL REFERENCES refresh_batches(id) ON DELETE CASCADE,
     source_id TEXT NOT NULL REFERENCES sources(id),
+    request_kind TEXT NOT NULL DEFAULT 'scan' CHECK (request_kind IN ('api', 'scan', 'embed')),
     status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'skipped')),
     http_status INTEGER,
     item_count INTEGER NOT NULL DEFAULT 0,
     started_at TEXT NOT NULL,
     completed_at TEXT,
     error_message TEXT
+);
+
+CREATE TABLE IF NOT EXISTS market_instrument_state (
+    instrument_key TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    provider_symbol TEXT NOT NULL,
+    currency TEXT,
+    highest_close REAL,
+    highest_close_at TEXT,
+    history_checked_at TEXT,
+    last_provider_timestamp TEXT,
+    last_success_at TEXT,
+    last_error TEXT,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS articles (
@@ -165,6 +180,9 @@ ON article_evaluations(batch_id, section, selected);
 CREATE INDEX IF NOT EXISTS idx_market_quotes_instrument_retrieved
 ON market_quotes(instrument_key, retrieved_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_market_quotes_batch_instrument
+ON market_quotes(batch_id, instrument_key);
+
 CREATE INDEX IF NOT EXISTS idx_feedback_article_created
 ON feedback_events(article_id, created_at DESC);
 
@@ -175,3 +193,5 @@ CREATE INDEX IF NOT EXISTS idx_llm_runs_section_completed
 ON llm_runs(section, completed_at DESC);
 
 PRAGMA optimize;
+
+PRAGMA user_version = 2;

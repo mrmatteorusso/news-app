@@ -20,12 +20,23 @@
         }
     };
 
-    const recordActivity = (type, section) => {
+    const recordActivity = (type, section, targetUrl = null) => {
         const activity = readActivity();
         activity.push({ type, section, at: new Date().toISOString() });
         try {
             window.localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activity.slice(-5000)));
         } catch (error) {}
+
+        void fetch('/api/interaction.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                event_type: type,
+                section,
+                target_url: targetUrl,
+            }),
+            keepalive: type === 'link_opened',
+        }).catch(() => {});
     };
 
     const applyThemeControls = () => {
@@ -59,7 +70,95 @@
         toastTimer = window.setTimeout(() => toast.classList.remove('toast--visible'), 3200);
     };
 
-    const updateSection = async (section, quiet = false) => {
+    const setSectionStatus = (section, status, message) => {
+        const state = section.querySelector('[data-section-state]');
+        const dot = section.querySelector('.status-dot');
+        if (state) state.textContent = message;
+        if (dot) {
+            dot.classList.remove('status-dot--ready', 'status-dot--working', 'status-dot--partial', 'status-dot--error', 'status-dot--down');
+            dot.classList.add(`status-dot--${status}`);
+        }
+    };
+
+    const applyFinanceSnapshot = (snapshot, section = document.querySelector('[data-section="finance"]')) => {
+        if (!snapshot || !section) return;
+
+        (snapshot.markets || []).forEach((market) => {
+            const card = section.querySelector(`[data-market-key="${CSS.escape(market.key)}"]`);
+            if (!card) return;
+            const setField = (name, value) => {
+                const field = card.querySelector(`[data-market-field="${name}"]`);
+                if (field) field.textContent = value;
+            };
+            setField('currency', market.currency);
+            setField('value', market.value);
+            setField('basis', market.change_basis.charAt(0).toUpperCase() + market.change_basis.slice(1));
+            setField('change', market.change);
+            setField('from-high', market.from_high);
+            setField('high', market.high);
+            setField('retrieved', market.retrieved);
+            setField('provider-updated', market.provider_updated);
+            setField('provider', market.provider);
+
+            const change = card.querySelector('[data-market-field="change"]');
+            if (change) {
+                change.classList.remove('change--up', 'change--down', 'change--flat');
+                change.classList.add(`change--${market.direction}`);
+            }
+        });
+
+        const updated = section.querySelector('[data-last-updated]');
+        const batch = section.querySelector('[data-batch-id]');
+        if (updated) updated.textContent = snapshot.last_success_display || '—';
+        if (batch) batch.textContent = snapshot.batch_id || 'NOT-RUN';
+
+        if (snapshot.status === 'ready') {
+            setSectionStatus(section, snapshot.stale ? 'partial' : 'ready', snapshot.stale ? 'Live cache ready · refresh recommended' : 'Live data ready');
+        } else if (snapshot.status === 'partial') {
+            setSectionStatus(section, 'partial', 'Live data · some providers unavailable');
+        } else if (snapshot.status === 'failed') {
+            setSectionStatus(section, 'error', snapshot.has_data ? 'Refresh failed · previous live data retained' : 'Live refresh unavailable');
+        } else {
+            setSectionStatus(section, 'working', 'Waiting for first live refresh');
+        }
+    };
+
+    const refreshFinanceSection = async (section, quiet = false, trigger = 'manual_section') => {
+        const button = section.querySelector('[data-refresh-section]');
+        if (button) button.disabled = true;
+        setSectionStatus(section, 'working', 'Retrieving live market data…');
+
+        try {
+            const response = await fetch('/api/finance.php?action=refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trigger }),
+            });
+            const payload = await response.json();
+            if (payload.snapshot) applyFinanceSnapshot(payload.snapshot, section);
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Finance refresh failed.');
+            }
+
+            recordActivity('section_refresh', 'finance');
+            if (!quiet) {
+                showToast(payload.skipped_cache ? 'Finance cache is already current.' : 'Finance market data refreshed successfully.');
+            }
+            return true;
+        } catch (error) {
+            setSectionStatus(section, 'error', 'Refresh failed · previous live data retained');
+            if (!quiet) showToast(error.message || 'Finance refresh failed. Previous values were retained.');
+            return false;
+        } finally {
+            if (button) button.disabled = false;
+        }
+    };
+
+    const updateSection = async (section, quiet = false, trigger = 'manual_section') => {
+        if (section.dataset.section === 'finance') {
+            return refreshFinanceSection(section, quiet, trigger);
+        }
+
         const button = section.querySelector('[data-refresh-section]');
         const state = section.querySelector('[data-section-state]');
         const dot = section.querySelector('.status-dot');
@@ -102,10 +201,10 @@
             refreshAll.disabled = true;
             refreshAll.innerHTML = '<span aria-hidden="true">↻</span> Preparing all sections…';
             const sections = [...document.querySelectorAll('[data-section]')];
-            await Promise.all(sections.map((section) => updateSection(section, true)));
+            await Promise.all(sections.map((section) => updateSection(section, true, 'manual_all')));
             refreshAll.disabled = false;
             refreshAll.innerHTML = '<span aria-hidden="true">↻</span> Refresh all';
-            showToast('All mock sections refreshed successfully.');
+            showToast('Finance data and all demonstration news sections refreshed.');
         });
     }
 
@@ -119,13 +218,14 @@
     document.querySelectorAll('[data-track-link]').forEach((link) => {
         link.addEventListener('click', () => {
             const section = link.closest('[data-section]')?.dataset.section || 'other';
-            recordActivity('link_opened', section);
+            recordActivity('link_opened', section, link.href);
         });
     });
 
     const renderActivityDashboard = () => {
         const dashboard = document.querySelector('[data-activity-dashboard]');
         if (!dashboard) return;
+        if (dashboard.dataset.serverMetrics === 'true') return;
 
         const activity = readActivity();
         const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
@@ -169,22 +269,46 @@
 
     const backgroundState = document.querySelector('#background-state');
     if (backgroundState) {
-        window.setTimeout(() => {
-            backgroundState.textContent = 'Mock candidates ready';
-        }, 1100);
+        const financeSection = document.querySelector('[data-section="finance"]');
+        void fetch('/api/finance.php?action=status')
+            .then((response) => response.json())
+            .then(async (payload) => {
+                if (!payload.ok || !payload.snapshot) throw new Error('Finance status unavailable.');
+                applyFinanceSnapshot(payload.snapshot, financeSection);
+                if (payload.snapshot.stale || !payload.snapshot.has_data) {
+                    backgroundState.textContent = 'Preparing live finance data…';
+                    await refreshFinanceSection(financeSection, true, 'page_open');
+                    backgroundState.textContent = 'Finance cache ready';
+                } else {
+                    backgroundState.textContent = 'Finance cache already ready';
+                }
+            })
+            .catch(() => {
+                backgroundState.textContent = 'Finance check unavailable';
+            });
     }
 
     const checkSources = document.querySelector('#check-sources');
     if (checkSources) {
         checkSources.addEventListener('click', async () => {
             checkSources.disabled = true;
-            checkSources.innerHTML = '<span aria-hidden="true">↻</span> Checking…';
-            await delay(1000);
-            const checkTime = document.querySelector('[data-source-check-time]');
-            if (checkTime) checkTime.textContent = formatTime();
-            checkSources.disabled = false;
-            checkSources.innerHTML = '<span aria-hidden="true">↻</span> Check all sources';
-            showToast('Mock source check complete. Existing example warnings were retained.');
+            checkSources.innerHTML = '<span aria-hidden="true">↻</span> Refreshing finance…';
+            try {
+                const response = await fetch('/api/finance.php?action=refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ trigger: 'manual_section' }),
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Provider check failed.');
+                recordActivity('section_refresh', 'finance');
+                showToast('Finance providers checked. Reloading status…');
+                window.setTimeout(() => window.location.reload(), 500);
+            } catch (error) {
+                showToast(error.message || 'Provider check failed.');
+                checkSources.disabled = false;
+                checkSources.innerHTML = '<span aria-hidden="true">↻</span> Refresh finance providers';
+            }
         });
     }
 

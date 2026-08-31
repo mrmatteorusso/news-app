@@ -8,6 +8,8 @@ services:
     environment:
       APP_ENV: "${APP_ENV:-local}"
       APP_TIMEZONE: "${APP_TIMEZONE:-Europe/Rome}"
+      FINANCE_CACHE_MINUTES: "${FINANCE_CACHE_MINUTES:-60}"
+      MARKET_HISTORY_REFRESH_HOURS: "${MARKET_HISTORY_REFRESH_HOURS:-168}"
       LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:1234/v1}"
       LLM_MODEL: "${LLM_MODEL:-qwen3.5-4b}"
     volumes:

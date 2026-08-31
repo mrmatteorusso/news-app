@@ -57,7 +57,7 @@ function render_section_header(array $section): void
             <p class="section-heading__time">
                 Last successful update: <strong data-last-updated><?= e($section['updated']) ?></strong>
                 <span class="separator">·</span>
-                Batch <span><?= e($section['batch']) ?></span>
+                Batch <span data-batch-id><?= e($section['batch']) ?></span>
             </p>
         </div>
         <button class="button button--section" type="button" data-refresh-section aria-label="Refresh <?= e($section['title']) ?>">

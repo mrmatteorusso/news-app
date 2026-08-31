@@ -5,11 +5,95 @@ declare(strict_types=1);
 /**
  * Initial provider-neutral source catalogue.
  *
- * Stage 1 does not fetch these sources. Feed/API URLs will be verified before
- * enabling their adapters in Stage 3. A private local override can be placed
+ * Stage 2 fetches only the market-data providers. Feed/page URLs will be
+ * verified before enabling their adapters in Stage 3. A private local override can be placed
  * in config/sources.local.php; that file is ignored by Git.
  */
 return [
+    [
+        'id' => 'yahoo_chart',
+        'name' => 'Yahoo Finance chart endpoint',
+        'url' => 'https://query1.finance.yahoo.com/v8/finance/chart/',
+        'categories' => ['finance'],
+        'geography' => 'global',
+        'source_type' => 'market_data',
+        'trust_level' => 3,
+        'enabled' => true,
+        'refresh_method' => 'public_json',
+        'notes' => 'No-key endpoint used through a replaceable adapter; unofficial and therefore monitored carefully.',
+    ],
+    [
+        'id' => 'coingecko',
+        'name' => 'CoinGecko Keyless Public API',
+        'url' => 'https://api.coingecko.com/api/v3/coins/markets',
+        'categories' => ['finance'],
+        'geography' => 'global',
+        'source_type' => 'market_data',
+        'trust_level' => 4,
+        'enabled' => true,
+        'refresh_method' => 'public_json',
+        'notes' => 'One batched call for BTC, ETH, and ADA with IP-based rate limits.',
+    ],
+    [
+        'id' => 'bitcoin_core_releases',
+        'name' => 'Bitcoin Core releases',
+        'url' => 'https://github.com/bitcoin/bitcoin/releases.atom',
+        'categories' => ['crypto'],
+        'geography' => 'global',
+        'source_type' => 'primary',
+        'trust_level' => 5,
+        'enabled' => true,
+        'refresh_method' => 'atom',
+        'notes' => 'Primary technical releases; only material security, compatibility, or network changes qualify.',
+    ],
+    [
+        'id' => 'ethereum_foundation_blog',
+        'name' => 'Ethereum Foundation Blog',
+        'url' => 'https://blog.ethereum.org/feed.xml',
+        'categories' => ['crypto'],
+        'geography' => 'global',
+        'source_type' => 'primary',
+        'trust_level' => 5,
+        'enabled' => true,
+        'refresh_method' => 'rss',
+        'notes' => 'Network upgrades, security, protocol research, and important ecosystem changes.',
+    ],
+    [
+        'id' => 'cardano_foundation_news',
+        'name' => 'Cardano Foundation News',
+        'url' => 'https://cardanofoundation.org/en/news/',
+        'categories' => ['crypto'],
+        'geography' => 'global',
+        'source_type' => 'primary',
+        'trust_level' => 5,
+        'enabled' => true,
+        'refresh_method' => 'official_page',
+        'notes' => 'ADA and Cardano governance, protocol, legal, adoption, and infrastructure developments.',
+    ],
+    [
+        'id' => 'coindesk_crypto',
+        'name' => 'CoinDesk RSS',
+        'url' => 'https://www.coindesk.com/arc/outboundfeeds/rss/',
+        'categories' => ['crypto'],
+        'geography' => 'global',
+        'source_type' => 'specialist',
+        'trust_level' => 3,
+        'enabled' => true,
+        'refresh_method' => 'rss',
+        'notes' => 'Broad discovery feed; consequential claims require primary-source confirmation.',
+    ],
+    [
+        'id' => 'esma_crypto',
+        'name' => 'ESMA crypto-assets updates',
+        'url' => 'https://www.esma.europa.eu/esmas-activities/digital-finance-and-innovation/markets-crypto-assets-regulation-mica',
+        'categories' => ['crypto', 'finance'],
+        'geography' => 'eu',
+        'source_type' => 'primary',
+        'trust_level' => 5,
+        'enabled' => true,
+        'refresh_method' => 'official_page',
+        'notes' => 'Material MiCA, custody, stablecoin, market-structure, and consumer-protection changes.',
+    ],
     [
         'id' => 'bbc_world',
         'name' => 'BBC World',
@@ -155,4 +239,3 @@ return [
         'notes' => 'Five signals without a paid API. Availability may be limited; never treat as verified news.',
     ],
 ];
-
