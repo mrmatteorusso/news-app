@@ -1,0 +1,25 @@
+services:
+  dashboard:
+    build:
+      context: .
+    container_name: personal-news-dashboard
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      APP_ENV: "${APP_ENV:-local}"
+      APP_TIMEZONE: "${APP_TIMEZONE:-Europe/Rome}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:1234/v1}"
+      LLM_MODEL: "${LLM_MODEL:-qwen3.5-4b}"
+    volumes:
+      - ./public:/var/www/html:ro
+      - ./src:/var/www/src:ro
+      - ./config:/var/www/config:ro
+      - ./database:/var/www/database:ro
+      - ./profiles:/var/www/profiles:ro
+      - ./storage:/var/www/storage
+    healthcheck:
+      test: ["CMD-SHELL", "php -r \"exit(@file_get_contents('http://127.0.0.1/health.php') === false ? 1 : 0);\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

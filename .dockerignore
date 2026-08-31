@@ -1,0 +1,11 @@
+.git
+.github
+.vscode
+.idea
+.env
+.env.local
+storage/*
+profiles/private/*
+*.log
+README.md
+

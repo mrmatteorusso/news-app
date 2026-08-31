@@ -1,0 +1,27 @@
+# Local environment and secrets
+.env
+.env.local
+
+# Runtime data (never publish personal news history)
+storage/*
+!storage/.gitkeep
+*.sqlite
+*.sqlite3
+*.db
+
+# Personal AI profiles and local source overrides
+profiles/private/*
+!profiles/private/.gitkeep
+config/sources.local.php
+
+# Logs and generated files
+*.log
+coverage/
+.phpunit.cache/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
