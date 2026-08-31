@@ -81,14 +81,17 @@ return [
         'change_basis' => 'previous close',
     ],
     [
-        'key' => 'gold',
-        'name' => 'Gold (COMEX)',
-        'symbol' => 'GC',
-        'identifier' => 'Front-month futures',
+        'key' => 'gold_eur_gram',
+        'name' => 'Gold',
+        'symbol' => 'XAU',
+        'identifier' => 'EUR/gram · COMEX converted',
         'provider' => 'yahoo_chart',
         'provider_symbol' => 'GC=F',
+        'conversion' => 'usd_ounce_to_eur_gram',
+        'fx_provider_symbol' => 'EURUSD=X',
         'decimals' => 2,
         'value_style' => 'money',
+        'value_suffix' => '/g',
         'change_basis' => 'previous close',
     ],
     [
@@ -125,4 +128,3 @@ return [
         'change_basis' => '24 hours',
     ],
 ];
-

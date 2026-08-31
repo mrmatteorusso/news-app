@@ -54,10 +54,10 @@ final class MarketPresenter
             'symbol' => $config['symbol'],
             'identifier' => $config['identifier'],
             'currency' => $currency,
-            'value' => self::formatValue((float) $quote['latest_value'], $currency, (int) $config['decimals'], $config['value_style']),
+            'value' => self::formatValue((float) $quote['latest_value'], $currency, (int) $config['decimals'], $config['value_style'], $config['value_suffix'] ?? ''),
             'change' => self::formatPercent($change),
             'from_high' => self::formatPercent((float) $quote['from_high_percent']),
-            'high' => self::formatValue((float) $quote['highest_close'], $currency, (int) $config['decimals'], $config['value_style']),
+            'high' => self::formatValue((float) $quote['highest_close'], $currency, (int) $config['decimals'], $config['value_style'], $config['value_suffix'] ?? ''),
             'direction' => $change > 0.00001 ? 'up' : ($change < -0.00001 ? 'down' : 'flat'),
             'retrieved' => self::formatTimestamp($quote['retrieved_at']),
             'provider_updated' => self::formatTimestamp($quote['provider_timestamp']),
@@ -67,18 +67,19 @@ final class MarketPresenter
         ];
     }
 
-    private static function formatValue(float $value, string $currency, int $decimals, string $style): string
+    private static function formatValue(float $value, string $currency, int $decimals, string $style, string $suffix = ''): string
     {
         $number = number_format($value, $decimals, '.', ',');
         if ($style === 'number') {
-            return $number;
+            return $number . $suffix;
         }
-        return match ($currency) {
+        $formatted = match ($currency) {
             'USD' => '$' . $number,
             'EUR' => '€' . $number,
             'GBP' => '£' . $number,
             default => trim($number . ' ' . $currency),
         };
+        return $formatted . $suffix;
     }
 
     private static function formatPercent(float $value): string
@@ -108,4 +109,3 @@ final class MarketPresenter
         };
     }
 }
-
