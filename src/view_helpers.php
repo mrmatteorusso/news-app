@@ -15,19 +15,20 @@ function mock_time(string $relative): string
 function render_story(array $story, string $variant = ''): void
 {
     $classes = trim('story-card ' . $variant);
+    $articleId = isset($story['article_id']) ? (int) $story['article_id'] : null;
     ?>
-    <article class="<?= e($classes) ?>">
+    <article class="<?= e($classes) ?>"<?= $articleId ? ' data-article-id="' . e($articleId) . '"' : '' ?>>
         <div class="story-card__meta-top">
             <span class="story-card__tag"><?= e($story['tag']) ?></span>
             <?php if (!empty($story['confidence'])): ?>
-                <span class="confidence" title="Confidence measures how complete and corroborated the available evidence is.">
+                <span class="confidence" title="<?= e($story['confidence_title'] ?? 'Confidence measures how complete and corroborated the available evidence is.') ?>">
                     Evidence: <?= e($story['confidence']) ?>
                 </span>
             <?php endif; ?>
         </div>
         <h3><?= e($story['headline']) ?></h3>
         <p><?= e($story['summary']) ?></p>
-        <p class="why"><strong>Why it was chosen:</strong> <?= e($story['why']) ?></p>
+        <p class="why"><strong><?= e($story['why_label'] ?? 'Why it was chosen') ?>:</strong> <?= e($story['why']) ?></p>
         <?php if (!empty($story['business_angle'])): ?>
             <p class="business-angle"><strong>Business angle:</strong> <?= e($story['business_angle']) ?></p>
         <?php endif; ?>
@@ -38,7 +39,7 @@ function render_story(array $story, string $variant = ''): void
             <span data-retrieved-at>Retrieved <?= e($story['retrieved']) ?></span>
         </div>
         <a class="story-link" href="<?= e($story['url']) ?>" target="_blank" rel="noreferrer noopener" data-track-link>
-            Open example source <span aria-hidden="true">→</span>
+            <?= e($story['link_label'] ?? 'Open source') ?> <span aria-hidden="true">→</span>
         </a>
     </article>
     <?php

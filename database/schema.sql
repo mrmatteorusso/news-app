@@ -68,6 +68,15 @@ CREATE TABLE IF NOT EXISTS articles (
     expires_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS article_sections (
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    section TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    last_batch_id TEXT NOT NULL REFERENCES refresh_batches(id) ON DELETE CASCADE,
+    PRIMARY KEY (article_id, section)
+);
+
 CREATE TABLE IF NOT EXISTS article_evaluations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
@@ -174,6 +183,9 @@ ON articles(source_id, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_expires_at
 ON articles(expires_at);
 
+CREATE INDEX IF NOT EXISTS idx_article_sections_section_seen
+ON article_sections(section, last_seen_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_evaluations_batch_section_selected
 ON article_evaluations(batch_id, section, selected);
 
@@ -194,4 +206,4 @@ ON llm_runs(section, completed_at DESC);
 
 PRAGMA optimize;
 
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;

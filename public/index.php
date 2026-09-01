@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/../src/market_bootstrap.php';
+require_once __DIR__ . '/../src/news_bootstrap.php';
 require_once __DIR__ . '/../src/dashboard_data.php';
 
 $pageTitle = 'Personal Briefing';
@@ -45,6 +46,65 @@ $sections['finance'] = array_replace($sections['finance'], [
     'updated' => $liveMarketSnapshot['last_success_display'],
     'batch' => $liveMarketSnapshot['batch_id'] ?? 'NOT-RUN',
 ]);
+
+$liveNewsSnapshots = [];
+foreach (['breaking', 'finance', 'crypto', 'ai'] as $newsSection) {
+    try {
+        $liveNewsSnapshots[$newsSection] = news_snapshot($newsSection);
+    } catch (Throwable $exception) {
+        error_log('News snapshot error for ' . $newsSection . ': ' . $exception->getMessage());
+        $liveNewsSnapshots[$newsSection] = [
+            'stories' => [],
+            'status' => 'failed',
+            'stale' => true,
+            'has_data' => false,
+            'archive_count' => 0,
+            'batch_id' => null,
+            'last_success_display' => 'Not yet',
+            'warning' => 'The local news database could not be opened.',
+        ];
+    }
+}
+
+$newsStateLabel = static function (array $snapshot): string {
+    $countLabel = sprintf('%d stored · %d shown', (int) ($snapshot['archive_count'] ?? 0), count($snapshot['stories'] ?? []));
+    if ($snapshot['status'] === 'failed') {
+        return $snapshot['has_data'] ? 'Feed check failed · previous intake retained · ' . $countLabel : 'Feed check unavailable';
+    }
+    if ($snapshot['status'] === 'partial') {
+        return 'Live intake ready · some feeds unavailable · ' . $countLabel;
+    }
+    if ($snapshot['status'] === 'ready') {
+        return ($snapshot['stale'] ? 'Live intake cached · background check due · ' : 'Live intake ready · ') . $countLabel;
+    }
+    return 'Waiting for first feed check';
+};
+$newsStatusLabel = static fn (string $status): string => match ($status) {
+    'ready' => 'ready',
+    'partial' => 'partial',
+    'failed' => 'error',
+    default => 'working',
+};
+
+foreach (['breaking', 'crypto', 'ai'] as $newsSection) {
+    $snapshot = $liveNewsSnapshots[$newsSection];
+    $sections[$newsSection] = array_replace($sections[$newsSection], [
+        'status' => $newsStatusLabel($snapshot['status']),
+        'state' => $newsStateLabel($snapshot),
+        'updated' => $snapshot['last_success_display'],
+        'batch' => $snapshot['batch_id'] ?? 'NOT-RUN',
+    ]);
+}
+
+$financeNews = $liveNewsSnapshots['finance'];
+$financeStories = $financeNews['stories'];
+$breakingStories = $liveNewsSnapshots['breaking']['stories'];
+$cryptoStories = $liveNewsSnapshots['crypto']['stories'];
+$aiStories = $liveNewsSnapshots['ai']['stories'];
+$sections['finance']['state'] .= ' · News: ' . $newsStateLabel($financeNews);
+$sections['finance']['status'] = in_array('error', [$sections['finance']['status'], $newsStatusLabel($financeNews['status'])], true)
+    ? 'error'
+    : (in_array('partial', [$sections['finance']['status'], $newsStatusLabel($financeNews['status'])], true) ? 'partial' : $sections['finance']['status']);
 ?>
 <!doctype html>
 <html lang="en" data-theme="light">
@@ -88,8 +148,8 @@ $sections['finance'] = array_replace($sections['finance'], [
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 2 · Live finance</strong>
-            <span>Market values are live, cached data after the first successful refresh. News headlines remain clearly labelled demonstration examples until feed ingestion in Stage 3.</span>
+            <strong>Stage 3 · Live feed intake</strong>
+            <span>Breaking, finance, crypto, and AI now come from free live feeds and persist in SQLite. They are intake candidates—not yet importance-ranked by Stage 4 or judged by Qwen. X, Italy, and local remain demonstration sections.</span>
         </div>
 
         <section class="briefing-meta" aria-label="Briefing status">
@@ -99,7 +159,7 @@ $sections['finance'] = array_replace($sections['finance'], [
             </div>
             <div>
                 <span class="meta-label">Data status</span>
-                <strong><span class="status-dot status-dot--<?= e($financeStatus) ?>"></span> Finance <?= e($liveMarketSnapshot['has_data'] ? 'cache available' : 'awaiting first refresh') ?></strong>
+                <strong><span class="status-dot status-dot--<?= e($financeStatus) ?>"></span> Markets + live feed intake</strong>
             </div>
             <div>
                 <span class="meta-label">Reading target</span>
@@ -107,16 +167,17 @@ $sections['finance'] = array_replace($sections['finance'], [
             </div>
             <div>
                 <span class="meta-label">Background preparation</span>
-                <strong id="background-state">Starting mock check…</strong>
+                <strong id="background-state">Checking live caches…</strong>
             </div>
         </section>
 
         <section class="dashboard-section dashboard-section--breaking" data-section="breaking">
             <?php render_section_header($sections['breaking']); ?>
-            <div class="story-grid story-grid--featured">
+            <p class="section-note"><strong>Stage 3 intake:</strong> these are recent source candidates. Critical-event ranking and cross-source corroboration arrive in Stage 4.</p>
+            <div class="story-grid story-grid--featured" data-news-grid>
                 <?php foreach ($breakingStories as $story) { render_story($story, 'story-card--breaking'); } ?>
             </div>
-            <p class="empty-state">Every event that genuinely passes the critical threshold will appear. If none qualify: <strong>No major breaking events detected.</strong></p>
+            <p class="empty-state" data-news-empty<?= $breakingStories !== [] ? ' hidden' : '' ?>>No live intake is stored yet. The background check starts when this page opens.</p>
         </section>
 
         <section class="dashboard-section" data-section="finance">
@@ -165,24 +226,28 @@ $sections['finance'] = array_replace($sections['finance'], [
                     <h3>Only decisions and movements with broad consequences</h3>
                 </div>
             </div>
-            <div class="story-grid">
+            <div class="story-grid" data-news-grid>
                 <?php foreach ($financeStories as $story) { render_story($story); } ?>
             </div>
+            <p class="empty-state" data-news-empty<?= $financeStories !== [] ? ' hidden' : '' ?>>No finance-news intake is stored yet. Market cards remain independent.</p>
         </section>
 
         <section class="dashboard-section dashboard-section--crypto" data-section="crypto">
             <?php render_section_header($sections['crypto']); ?>
             <p class="section-note"><strong>Focus:</strong> consequential Bitcoin, Ethereum, and ADA developments plus industry-wide regulation, security, infrastructure, and adoption changes. Routine price commentary is excluded.</p>
-            <div class="story-grid">
+            <div class="story-grid" data-news-grid>
                 <?php foreach ($cryptoStories as $story) { render_story($story); } ?>
             </div>
+            <p class="empty-state" data-news-empty<?= $cryptoStories !== [] ? ' hidden' : '' ?>>No crypto-news intake is stored yet.</p>
         </section>
 
         <section class="dashboard-section" data-section="ai">
             <?php render_section_header($sections['ai']); ?>
-            <div class="story-grid">
+            <p class="section-note"><strong>Stage 3 intake:</strong> official announcements, field experts, community discovery, and Chinese open-model updates are kept visibly distinct by source type.</p>
+            <div class="story-grid" data-news-grid>
                 <?php foreach ($aiStories as $story) { render_story($story); } ?>
             </div>
+            <p class="empty-state" data-news-empty<?= $aiStories !== [] ? ' hidden' : '' ?>>No AI / technology intake is stored yet.</p>
         </section>
 
         <section class="dashboard-section dashboard-section--signals" data-section="x">
@@ -221,10 +286,10 @@ $sections['finance'] = array_replace($sections['finance'], [
 
         <aside class="method-note">
             <div>
-                <p class="overline">How selection will work</p>
-                <h2>Deterministic filtering first. Qwen judgment second.</h2>
+                <p class="overline">Current pipeline</p>
+                <h2>Safe intake now. Importance ranking next. Qwen later.</h2>
             </div>
-            <p>PHP will apply source trust, geography, age, keywords, hard exclusions, market thresholds, and duplicate checks. In Stage 5, Qwen3.5 4B will read only the surviving candidates plus the relevant Markdown profile, then return relevance, importance, evidence confidence, summary, and the visible “Why it was chosen” explanation.</p>
+            <p>Stage 3 stores feed metadata, short feed excerpts, timestamps, source trust, and canonical links—never full article bodies. Stage 4 adds deterministic relevance, importance, duplicate, and corroboration rules. In Stage 5, Qwen3.5 4B will read only the survivors plus the relevant Markdown profile and produce the visible AI “Why it was chosen” explanation.</p>
         </aside>
     </main>
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/../src/market_bootstrap.php';
+require_once __DIR__ . '/../src/news_bootstrap.php';
 require_once __DIR__ . '/../src/source_status_data.php';
 
 function status_time(?string $timestamp): string
@@ -27,10 +28,8 @@ function duration_label(?float $milliseconds): string
 }
 
 $providerHealth = market_repository()->providerHealth();
-$sourceStatuses = array_values(array_filter(
-    $sourceStatuses,
-    static fn (array $source): bool => $source['name'] !== 'Market data provider',
-));
+$sourceStatuses = [];
+$lastLiveSuccesses = [];
 $providerDefinitions = [
     'yahoo_chart' => ['name' => 'Yahoo chart endpoint', 'type' => 'Public JSON · unofficial'],
     'coingecko' => ['name' => 'CoinGecko Public API', 'type' => 'Keyless public API'],
@@ -51,6 +50,64 @@ foreach ($providerDefinitions as $key => $definition) {
         'type' => $definition['type'],
         'last_success' => status_time($health['last_success'] ?? null),
         'detail' => $health['detail'] ?? 'Waiting for the first live finance refresh.',
+    ];
+    if (is_string($health['last_success'] ?? null)) {
+        $lastLiveSuccesses[] = $health['last_success'];
+    }
+}
+
+$sectionNames = [
+    'breaking' => 'Critical',
+    'finance' => 'Finance',
+    'crypto' => 'Crypto',
+    'ai_business' => 'AI / Tech',
+    'x_signals' => 'X Signals',
+    'italy' => 'Italy',
+    'local' => 'My Area',
+];
+$activeNewsSources = news_refresh_service()->activeSources();
+$newsHealth = news_repository()->sourceHealth(array_column($activeNewsSources, 'id'));
+foreach ($activeNewsSources as $source) {
+    $health = $newsHealth[$source['id']];
+    $latest = $health['latest'];
+    $detail = 'Waiting for the first live feed check.';
+    if (is_array($latest) && $latest['status'] === 'success') {
+        $detail = sprintf('%d recent item(s) accepted · HTTP %s.', (int) $latest['item_count'], $latest['http_status'] ?: '—');
+    } elseif (is_array($latest)) {
+        $detail = $latest['error_message'] ?: 'The latest feed check failed.';
+    }
+    $sourceStatuses[] = [
+        'status' => $health['status'],
+        'label' => match ($health['status']) {
+            'healthy' => 'Healthy',
+            'down' => 'Unavailable',
+            default => is_array($latest) ? 'Previous kept' : 'Not checked',
+        },
+        'name' => $source['name'],
+        'geography' => ucwords(str_replace('_', ' ', $source['geography'])),
+        'section' => implode(' / ', array_map(static fn (string $category): string => $sectionNames[$category] ?? $category, $source['categories'])),
+        'type' => ucwords(str_replace('_', ' ', $source['source_type'])) . ' · ' . strtoupper($source['refresh_method']),
+        'last_success' => status_time($health['last_success']),
+        'detail' => $detail,
+    ];
+    if (is_string($health['last_success'])) {
+        $lastLiveSuccesses[] = $health['last_success'];
+    }
+}
+
+foreach (configured_sources() as $source) {
+    if (($source['stage3_active'] ?? false) || in_array($source['id'], array_keys($providerDefinitions), true)) {
+        continue;
+    }
+    $sourceStatuses[] = [
+        'status' => 'warning',
+        'label' => 'Planned',
+        'name' => $source['name'],
+        'geography' => ucwords(str_replace('_', ' ', $source['geography'])),
+        'section' => implode(' / ', array_map(static fn (string $category): string => $sectionNames[$category] ?? $category, $source['categories'])),
+        'type' => ucwords(str_replace('_', ' ', $source['source_type'])) . ' · ' . str_replace('_', ' ', $source['refresh_method']),
+        'last_success' => 'Not active',
+        'detail' => $source['notes'] ?? 'A source-specific adapter is planned.',
     ];
 }
 
@@ -80,13 +137,7 @@ $apiTotal = $metricTotal('api_total');
 $api7d = $metricTotal('api_7d');
 $qwenTotal = $average($qwenValues('qwen_total_ms'));
 $qwen7d = $average($qwenValues('qwen_7d_ms'));
-$lastProviderSuccesses = [];
-foreach ($providerHealth as $health) {
-    if (is_array($health) && is_string($health['last_success'] ?? null)) {
-        $lastProviderSuccesses[] = $health['last_success'];
-    }
-}
-$lastFinanceCheck = $lastProviderSuccesses === [] ? null : max($lastProviderSuccesses);
+$lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
 ?>
 <!doctype html>
 <html lang="en" data-theme="light">
@@ -122,12 +173,12 @@ $lastFinanceCheck = $lastProviderSuccesses === [] ? null : max($lastProviderSucc
                 <h1>Source status</h1>
                 <p>Distinguish “nothing important happened” from “the app could not check.” Previous successful dashboard data will remain visible after a failed refresh.</p>
             </div>
-            <button class="button button--primary" type="button" id="check-sources"><span aria-hidden="true">↻</span> Refresh finance providers</button>
+            <button class="button button--primary" type="button" id="check-sources"><span aria-hidden="true">↻</span> Refresh all live sources</button>
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 2 · Mixed status</strong>
-            <span>Yahoo and CoinGecko rows are live. News, Reddit, X, Italy, and local rows remain demonstration states until their ingestion stages.</span>
+            <strong>Stage 3 · Live source health</strong>
+            <span>Market providers and free news feeds are live. “Planned” rows need source-specific adapters and do not populate SQLite yet.</span>
         </div>
 
         <section class="status-summary" aria-label="Source summary">
@@ -143,7 +194,7 @@ $lastFinanceCheck = $lastProviderSuccesses === [] ? null : max($lastProviderSucc
                     <p class="overline">Activity and processing</p>
                     <h2>Usage telemetry</h2>
                 </div>
-                <p>SQLite stores refreshes, opened links, and provider calls. PHP news scans activate in Stage 3; Qwen timing activates in Stage 5.</p>
+                <p>SQLite stores refreshes, opened links, market API calls, and per-feed PHP scans. Qwen timing remains inactive until Stage 5.</p>
             </div>
 
             <div class="analytics-cards">
@@ -193,7 +244,7 @@ $lastFinanceCheck = $lastProviderSuccesses === [] ? null : max($lastProviderSucc
                     <p class="overline">Configured coverage</p>
                     <h2>Feeds and public sources</h2>
                 </div>
-                <p>Last live finance success: <strong data-source-check-time><?= e(status_time($lastFinanceCheck)) ?></strong></p>
+                <p>Last live source success: <strong data-source-check-time><?= e(status_time($lastLiveCheck)) ?></strong></p>
             </div>
             <div class="source-table-wrap">
                 <table class="source-table">

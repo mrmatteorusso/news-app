@@ -56,15 +56,17 @@ final class TelemetryRepository
 
     private function countFetches(string $section, string $kind, bool $lastSevenDays = false): int
     {
+        $batchSections = $section === 'finance' ? ['finance', 'finance_news'] : [$section];
+        $placeholders = implode(',', array_fill(0, count($batchSections), '?'));
         $sql = 'SELECT COUNT(*)
                 FROM source_fetches sf
                 INNER JOIN refresh_batches rb ON rb.id = sf.batch_id
-                WHERE rb.section = :section AND sf.request_kind = :request_kind';
+                WHERE rb.section IN (' . $placeholders . ') AND sf.request_kind = ?';
         if ($lastSevenDays) {
             $sql .= " AND sf.completed_at >= datetime('now', '-7 days')";
         }
         $statement = $this->pdo->prepare($sql);
-        $statement->execute([':section' => $section, ':request_kind' => $kind]);
+        $statement->execute([...$batchSections, $kind]);
         return (int) $statement->fetchColumn();
     }
 
@@ -80,4 +82,3 @@ final class TelemetryRepository
         return $value === null ? null : (float) $value;
     }
 }
-

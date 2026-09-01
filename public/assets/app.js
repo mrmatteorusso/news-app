@@ -123,7 +123,91 @@
         }
     };
 
-    const refreshFinanceSection = async (section, quiet = false, trigger = 'manual_section') => {
+    const createStoryCard = (story, featured = false) => {
+        const article = document.createElement('article');
+        article.className = `story-card${featured ? ' story-card--breaking' : ''}`;
+        if (story.article_id) article.dataset.articleId = String(story.article_id);
+
+        const meta = document.createElement('div');
+        meta.className = 'story-card__meta-top';
+        const tag = document.createElement('span');
+        tag.className = 'story-card__tag';
+        tag.textContent = story.tag || 'LIVE INTAKE';
+        meta.append(tag);
+        if (story.confidence) {
+            const confidence = document.createElement('span');
+            confidence.className = 'confidence';
+            confidence.textContent = `Evidence: ${story.confidence}`;
+            confidence.title = story.confidence_title || 'Source-level trust only; article-level confidence arrives in Stage 4.';
+            meta.append(confidence);
+        }
+
+        const heading = document.createElement('h3');
+        heading.textContent = story.headline || 'Untitled feed item';
+        const summary = document.createElement('p');
+        summary.textContent = story.summary || '';
+        const why = document.createElement('p');
+        why.className = 'why';
+        const whyLabel = document.createElement('strong');
+        whyLabel.textContent = `${story.why_label || 'Why it appears'}: `;
+        why.append(whyLabel, document.createTextNode(story.why || 'Recent feed candidate.'));
+
+        const details = document.createElement('div');
+        details.className = 'story-card__details';
+        [
+            story.source || 'Unknown source',
+            `Published ${story.published || 'Not supplied'}`,
+            `Source updated ${story.source_updated || 'Not supplied'}`,
+            `Retrieved ${story.retrieved || 'Not supplied'}`,
+        ].forEach((value) => {
+            const span = document.createElement('span');
+            span.textContent = value;
+            details.append(span);
+        });
+
+        const link = document.createElement('a');
+        link.className = 'story-link';
+        link.href = story.url;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.dataset.trackLink = '';
+        link.append(document.createTextNode(`${story.link_label || 'Open original'} `));
+        const arrow = document.createElement('span');
+        arrow.setAttribute('aria-hidden', 'true');
+        arrow.textContent = '→';
+        link.append(arrow);
+
+        article.append(meta, heading, summary, why, details, link);
+        return article;
+    };
+
+    const applyNewsSnapshot = (snapshot, section) => {
+        if (!snapshot || !section) return;
+        const grid = section.querySelector('[data-news-grid]');
+        if (grid) {
+            grid.replaceChildren(...(snapshot.stories || []).map((story) => createStoryCard(story, section.dataset.section === 'breaking')));
+        }
+        const empty = section.querySelector('[data-news-empty]');
+        if (empty) empty.hidden = (snapshot.stories || []).length > 0;
+
+        const updated = section.querySelector('[data-last-updated]');
+        const batch = section.querySelector('[data-batch-id]');
+        if (updated) updated.textContent = snapshot.last_success_display || 'Not yet';
+        if (batch && snapshot.batch_id) batch.textContent = snapshot.batch_id;
+
+        const countLabel = `${snapshot.archive_count || 0} stored · ${(snapshot.stories || []).length} shown`;
+        if (snapshot.status === 'ready') {
+            setSectionStatus(section, snapshot.stale ? 'partial' : 'ready', snapshot.stale ? `Live intake cached · background check due · ${countLabel}` : `Live intake ready · ${countLabel}`);
+        } else if (snapshot.status === 'partial') {
+            setSectionStatus(section, 'partial', `Live intake ready · some feeds unavailable · ${countLabel}`);
+        } else if (snapshot.status === 'failed') {
+            setSectionStatus(section, 'error', snapshot.has_data ? `Feed check failed · previous intake retained · ${countLabel}` : 'Feed check unavailable');
+        } else {
+            setSectionStatus(section, 'working', 'Waiting for first feed check');
+        }
+    };
+
+    const refreshFinanceSection = async (section, quiet = false, trigger = 'manual_section', recordEvent = true) => {
         const button = section.querySelector('[data-refresh-section]');
         if (button) button.disabled = true;
         setSectionStatus(section, 'working', 'Retrieving live market data…');
@@ -140,7 +224,7 @@
                 throw new Error(payload.error || 'Finance refresh failed.');
             }
 
-            recordActivity('section_refresh', 'finance');
+            if (recordEvent) recordActivity('section_refresh', 'finance');
             if (!quiet) {
                 showToast(payload.skipped_cache ? 'Finance cache is already current.' : 'Finance market data refreshed successfully.');
             }
@@ -154,9 +238,55 @@
         }
     };
 
+    const refreshNewsSection = async (section, quiet = false, trigger = 'manual_section', recordEvent = true) => {
+        const label = section.dataset.section;
+        const button = section.querySelector('[data-refresh-section]');
+        if (button) button.disabled = true;
+        setSectionStatus(section, 'working', 'Checking free RSS and Atom feeds…');
+
+        try {
+            const response = await fetch(`/api/news.php?action=refresh&section=${encodeURIComponent(label)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trigger }),
+            });
+            const payload = await response.json();
+            if (payload.snapshot) applyNewsSnapshot(payload.snapshot, section);
+            if (!response.ok || !payload.ok) throw new Error(payload.error || 'Feed refresh failed.');
+            if (recordEvent) recordActivity('section_refresh', label);
+            if (!quiet) {
+                const count = payload.snapshot?.stories?.length || 0;
+                showToast(payload.skipped_cache ? `${label} intake is already current.` : `${label} checked; ${count} recent candidates are visible.`);
+            }
+            return true;
+        } catch (error) {
+            setSectionStatus(section, 'error', 'Feed check failed · previous intake retained');
+            if (!quiet) showToast(error.message || 'Feed refresh failed. Previous stories were retained.');
+            return false;
+        } finally {
+            if (button) button.disabled = false;
+        }
+    };
+
     const updateSection = async (section, quiet = false, trigger = 'manual_section') => {
         if (section.dataset.section === 'finance') {
-            return refreshFinanceSection(section, quiet, trigger);
+            const [marketsOk, newsOk] = await Promise.all([
+                refreshFinanceSection(section, true, trigger, false),
+                refreshNewsSection(section, true, trigger, false),
+            ]);
+            recordActivity('section_refresh', 'finance');
+            if (marketsOk && newsOk) {
+                setSectionStatus(section, 'ready', 'Live markets and finance-news intake checked');
+                if (!quiet) showToast('Finance markets and news intake refreshed.');
+            } else {
+                setSectionStatus(section, 'partial', 'Finance refresh partial · previous valid data retained');
+                if (!quiet) showToast('Finance refresh was partial. Previous valid data was retained.');
+            }
+            return marketsOk || newsOk;
+        }
+
+        if (['breaking', 'crypto', 'ai'].includes(section.dataset.section)) {
+            return refreshNewsSection(section, quiet, trigger);
         }
 
         const button = section.querySelector('[data-refresh-section]');
@@ -204,7 +334,7 @@
             await Promise.all(sections.map((section) => updateSection(section, true, 'manual_all')));
             refreshAll.disabled = false;
             refreshAll.innerHTML = '<span aria-hidden="true">↻</span> Refresh all';
-            showToast('Finance data and all demonstration news sections refreshed.');
+            showToast('All live sections checked; demonstration sections updated locally.');
         });
     }
 
@@ -215,11 +345,11 @@
         window.localStorage.setItem('personalBriefing.lastOpened', new Date().toISOString());
     }
 
-    document.querySelectorAll('[data-track-link]').forEach((link) => {
-        link.addEventListener('click', () => {
-            const section = link.closest('[data-section]')?.dataset.section || 'other';
-            recordActivity('link_opened', section, link.href);
-        });
+    document.addEventListener('click', (event) => {
+        const link = event.target.closest?.('[data-track-link]');
+        if (!link) return;
+        const section = link.closest('[data-section]')?.dataset.section || 'other';
+        recordActivity('link_opened', section, link.href);
     });
 
     const renderActivityDashboard = () => {
@@ -270,44 +400,70 @@
     const backgroundState = document.querySelector('#background-state');
     if (backgroundState) {
         const financeSection = document.querySelector('[data-section="finance"]');
-        void fetch('/api/finance.php?action=status')
-            .then((response) => response.json())
-            .then(async (payload) => {
-                if (!payload.ok || !payload.snapshot) throw new Error('Finance status unavailable.');
-                applyFinanceSnapshot(payload.snapshot, financeSection);
-                if (payload.snapshot.stale || !payload.snapshot.has_data) {
-                    backgroundState.textContent = 'Preparing live finance data…';
-                    await refreshFinanceSection(financeSection, true, 'page_open');
-                    backgroundState.textContent = 'Finance cache ready';
-                } else {
-                    backgroundState.textContent = 'Finance cache already ready';
+        const liveNewsSections = ['breaking', 'finance', 'crypto', 'ai'];
+        void Promise.all([
+            fetch('/api/finance.php?action=status').then((response) => response.json()),
+            ...liveNewsSections.map((section) => fetch(`/api/news.php?action=status&section=${section}`).then((response) => response.json())),
+        ]).then(async ([marketPayload, ...newsPayloads]) => {
+            let checksNeeded = 0;
+            if (marketPayload.ok && marketPayload.snapshot) {
+                applyFinanceSnapshot(marketPayload.snapshot, financeSection);
+            }
+            const jobs = [];
+            if (!marketPayload.ok || marketPayload.snapshot?.stale || !marketPayload.snapshot?.has_data) {
+                checksNeeded += 1;
+                jobs.push(refreshFinanceSection(financeSection, true, 'page_open'));
+            }
+            newsPayloads.forEach((payload, index) => {
+                const sectionName = liveNewsSections[index];
+                const section = document.querySelector(`[data-section="${sectionName}"]`);
+                if (payload.ok && payload.snapshot) applyNewsSnapshot(payload.snapshot, section);
+                if (!payload.ok || payload.snapshot?.stale || !payload.snapshot?.has_data) {
+                    checksNeeded += 1;
+                    jobs.push(refreshNewsSection(section, true, 'page_open'));
                 }
-            })
-            .catch(() => {
-                backgroundState.textContent = 'Finance check unavailable';
             });
+
+            if (checksNeeded === 0) {
+                backgroundState.textContent = 'All live caches already ready';
+                return;
+            }
+            backgroundState.textContent = `Preparing ${checksNeeded} live cache${checksNeeded === 1 ? '' : 's'}…`;
+            const results = await Promise.all(jobs);
+            const succeeded = results.filter(Boolean).length;
+            backgroundState.textContent = succeeded === results.length ? 'All live caches ready' : `${succeeded}/${results.length} live checks succeeded`;
+        }).catch(() => {
+            backgroundState.textContent = 'Background checks unavailable';
+        });
     }
 
     const checkSources = document.querySelector('#check-sources');
     if (checkSources) {
         checkSources.addEventListener('click', async () => {
             checkSources.disabled = true;
-            checkSources.innerHTML = '<span aria-hidden="true">↻</span> Refreshing finance…';
+            checkSources.innerHTML = '<span aria-hidden="true">↻</span> Checking all live sources…';
             try {
-                const response = await fetch('/api/finance.php?action=refresh', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ trigger: 'manual_section' }),
-                });
-                const payload = await response.json();
-                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Provider check failed.');
-                recordActivity('section_refresh', 'finance');
-                showToast('Finance providers checked. Reloading status…');
+                const requests = [
+                    ['finance', '/api/finance.php?action=refresh'],
+                    ...['breaking', 'finance', 'crypto', 'ai'].map((section) => [section, `/api/news.php?action=refresh&section=${section}`]),
+                ];
+                const results = await Promise.all(requests.map(async ([section, url]) => {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ trigger: 'manual_all' }),
+                    });
+                    const payload = await response.json();
+                    if (response.ok && payload.ok) recordActivity('section_refresh', section);
+                    return response.ok && payload.ok;
+                }));
+                const succeeded = results.filter(Boolean).length;
+                showToast(`${succeeded}/${results.length} live source groups checked. Reloading status…`);
                 window.setTimeout(() => window.location.reload(), 500);
             } catch (error) {
                 showToast(error.message || 'Provider check failed.');
                 checkSources.disabled = false;
-                checkSources.innerHTML = '<span aria-hidden="true">↻</span> Refresh finance providers';
+                checkSources.innerHTML = '<span aria-hidden="true">↻</span> Refresh all live sources';
             }
         });
     }

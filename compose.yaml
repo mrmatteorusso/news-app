@@ -10,6 +10,7 @@ services:
       APP_TIMEZONE: "${APP_TIMEZONE:-Europe/Rome}"
       FINANCE_CACHE_MINUTES: "${FINANCE_CACHE_MINUTES:-60}"
       MARKET_HISTORY_REFRESH_HOURS: "${MARKET_HISTORY_REFRESH_HOURS:-168}"
+      ARTICLE_RETENTION_DAYS: "${ARTICLE_RETENTION_DAYS:-90}"
       LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:1234/v1}"
       LLM_MODEL: "${LLM_MODEL:-qwen3.5-4b}"
     volumes:
@@ -18,6 +19,7 @@ services:
       - ./config:/var/www/config:ro
       - ./database:/var/www/database:ro
       - ./profiles:/var/www/profiles:ro
+      - ./tests:/var/www/tests:ro
       - ./storage:/var/www/storage
     healthcheck:
       test: ["CMD-SHELL", "php -r \"exit(@file_get_contents('http://127.0.0.1/health.php') === false ? 1 : 0);\""]
