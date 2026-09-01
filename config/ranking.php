@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 return [
-    'version' => 'deterministic-v2',
+    'version' => 'deterministic-v3-fixed-representative',
     'candidate_limit' => 250,
     'weights' => [
         'importance' => 0.32,

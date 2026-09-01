@@ -42,10 +42,9 @@ final class StoryClusterer
                 ];
             } else {
                 $clusters[$matchedIndex]['members'][] = $evaluation;
-                $clusters[$matchedIndex]['tokens'] = array_values(array_unique([
-                    ...$clusters[$matchedIndex]['tokens'],
-                    ...$tokens,
-                ]));
+                // Keep the highest-ranked representative's tokens fixed. Growing a
+                // union here permits transitive topic drift: A resembles B, B
+                // resembles C, but A and C may describe different events.
             }
         }
 

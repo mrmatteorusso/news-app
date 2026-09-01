@@ -36,8 +36,8 @@ final class TelemetryRepository
                 'scans_7d' => $this->countFetches($key, 'scan', true),
                 'api_total' => $this->countFetches($key, 'api'),
                 'api_7d' => $this->countFetches($key, 'api', true),
-                'qwen_total_ms' => $this->averageQwen($key),
-                'qwen_7d_ms' => $this->averageQwen($key, true),
+                'local_ai_total_ms' => $this->averageLocalAi($key),
+                'local_ai_7d_ms' => $this->averageLocalAi($key, true),
             ];
         }
         return $metrics;
@@ -70,7 +70,7 @@ final class TelemetryRepository
         return (int) $statement->fetchColumn();
     }
 
-    private function averageQwen(string $section, bool $lastSevenDays = false): ?float
+    private function averageLocalAi(string $section, bool $lastSevenDays = false): ?float
     {
         $sql = "SELECT AVG(duration_ms) FROM llm_runs WHERE section = :section AND status = 'success'";
         if ($lastSevenDays) {

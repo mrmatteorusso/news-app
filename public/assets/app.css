@@ -504,6 +504,98 @@ a:focus-visible {
     font: 650 0.62rem ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
 
+.related-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem .65rem;
+    align-items: baseline;
+    margin: .25rem 0;
+    font-size: .78rem;
+}
+
+.related-links a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+}
+
+.topic-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    margin: .15rem 0 .4rem;
+}
+
+.topic-tags span {
+    padding: .12rem .38rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    font: 600 .66rem/1.2 var(--font-mono);
+    letter-spacing: .03em;
+}
+
+.story-card .intelligence-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-bottom: 7px;
+    color: var(--purple);
+    font: 700 0.61rem ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.decision-trace {
+    margin: 0 0 7px;
+    padding: 6px 8px;
+    border: 1px dashed var(--soft-line);
+    border-radius: 4px;
+    color: var(--muted);
+    font: 650 0.61rem ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.decision-trace summary {
+    cursor: pointer;
+}
+
+.decision-trace p {
+    margin: 6px 0 0;
+    font-size: 0.66rem;
+}
+
+.feedback-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    margin-top: 9px;
+    padding-top: 7px;
+    border-top: 1px solid var(--soft-line);
+    color: var(--muted);
+    font: 650 0.56rem ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.feedback-controls button {
+    padding: 3px 5px;
+    border: 1px solid var(--soft-line);
+    border-radius: 3px;
+    color: var(--muted);
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+}
+
+.feedback-controls button:hover,
+.feedback-controls button[aria-pressed="true"] {
+    color: var(--forest-dark);
+    border-color: var(--forest);
+    background: var(--mint);
+}
+
+.feedback-controls button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
 .story-card .business-angle {
     border-left-color: var(--purple);
 }

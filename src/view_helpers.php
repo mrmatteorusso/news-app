@@ -26,6 +26,11 @@ function render_story(array $story, string $variant = ''): void
                 </span>
             <?php endif; ?>
         </div>
+        <?php if (!empty($story['topic_tags'])): ?>
+            <div class="topic-tags" aria-label="Topics">
+                <?php foreach ($story['topic_tags'] as $topic): ?><span><?= e($topic) ?></span><?php endforeach; ?>
+            </div>
+        <?php endif; ?>
         <h3><?= e($story['headline']) ?></h3>
         <p><?= e($story['summary']) ?></p>
         <?php if (!empty($story['score_breakdown'])): ?>
@@ -36,10 +41,26 @@ function render_story(array $story, string $variant = ''): void
                 <?php endforeach; ?>
             </div>
             <p class="corroboration"><strong>Corroboration:</strong> <?= e($story['corroboration']) ?></p>
+            <?php if (!empty($story['related_links'])): ?>
+                <p class="related-links"><strong>Related reports:</strong>
+                    <?php foreach ($story['related_links'] as $related): ?>
+                        <a href="<?= e($related['url']) ?>" target="_blank" rel="noreferrer noopener" data-track-link><?= e($related['name']) ?></a>
+                    <?php endforeach; ?>
+                </p>
+            <?php endif; ?>
+        <?php endif; ?>
+        <?php if (!empty($story['llm_model'])): ?>
+            <p class="intelligence-meta">
+                <strong>Gemma selected</strong>
+                <span>· <?= e($story['llm_reason_label'] ?? 'profile selection') ?> · <?= e($story['llm_model']) ?></span>
+            </p>
         <?php endif; ?>
         <p class="why"><strong><?= e($story['why_label'] ?? 'Why it was chosen') ?>:</strong> <?= e($story['why']) ?></p>
-        <?php if (!empty($story['business_angle'])): ?>
-            <p class="business-angle"><strong>Business angle:</strong> <?= e($story['business_angle']) ?></p>
+        <?php if (!empty($story['llm_model']) && !empty($story['deterministic_explanation'])): ?>
+            <details class="decision-trace">
+                <summary>Compare deterministic basis</summary>
+                <p><?= e($story['deterministic_explanation']) ?></p>
+            </details>
         <?php endif; ?>
         <div class="story-card__details">
             <span><?= e($story['source']) ?></span>
@@ -50,6 +71,16 @@ function render_story(array $story, string $variant = ''): void
         <a class="story-link" href="<?= e($story['url']) ?>" target="_blank" rel="noreferrer noopener" data-track-link>
             <?= e($story['link_label'] ?? 'Open source') ?> <span aria-hidden="true">→</span>
         </a>
+        <?php if ($articleId): ?>
+            <div class="feedback-controls" aria-label="Rate this selection">
+                <span>Teach the profile:</span>
+                <?php foreach (['useful' => 'Useful', 'too_minor' => 'Too minor', 'wrong_category' => 'Wrong category', 'not_useful' => 'Not useful'] as $action => $label): ?>
+                    <button type="button" data-feedback-action="<?= e($action) ?>" aria-pressed="<?= ($story['feedback_action'] ?? null) === $action ? 'true' : 'false' ?>">
+                        <?= e($label) ?>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
     </article>
     <?php
 }

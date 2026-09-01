@@ -142,12 +142,26 @@
             meta.append(confidence);
         }
 
+        let topicTags = null;
+        if (Array.isArray(story.topic_tags) && story.topic_tags.length > 0) {
+            topicTags = document.createElement('div');
+            topicTags.className = 'topic-tags';
+            topicTags.setAttribute('aria-label', 'Topics');
+            story.topic_tags.forEach((topic) => {
+                const chip = document.createElement('span');
+                chip.textContent = topic;
+                topicTags.append(chip);
+            });
+        }
+
         const heading = document.createElement('h3');
         heading.textContent = story.headline || 'Untitled feed item';
         const summary = document.createElement('p');
         summary.textContent = story.summary || '';
         let scoreStrip = null;
         let corroboration = null;
+        let relatedLinks = null;
+        let intelligenceMeta = null;
         if (story.score_breakdown && Object.keys(story.score_breakdown).length > 0) {
             scoreStrip = document.createElement('div');
             scoreStrip.className = 'score-strip';
@@ -168,12 +182,46 @@
             const corroborationLabel = document.createElement('strong');
             corroborationLabel.textContent = 'Corroboration: ';
             corroboration.append(corroborationLabel, document.createTextNode(story.corroboration || 'Single-source cluster'));
+            if (Array.isArray(story.related_links) && story.related_links.length > 0) {
+                relatedLinks = document.createElement('p');
+                relatedLinks.className = 'related-links';
+                const relatedLabel = document.createElement('strong');
+                relatedLabel.textContent = 'Related reports: ';
+                relatedLinks.append(relatedLabel);
+                story.related_links.forEach((related) => {
+                    const relatedLink = document.createElement('a');
+                    relatedLink.href = related.url;
+                    relatedLink.target = '_blank';
+                    relatedLink.rel = 'noreferrer noopener';
+                    relatedLink.dataset.trackLink = '';
+                    relatedLink.textContent = related.name;
+                    relatedLinks.append(relatedLink);
+                });
+            }
+        }
+        if (story.llm_model) {
+            intelligenceMeta = document.createElement('p');
+            intelligenceMeta.className = 'intelligence-meta';
+            const fit = document.createElement('strong');
+            fit.textContent = 'Gemma selected';
+            intelligenceMeta.append(fit, document.createTextNode(` · ${story.llm_reason_label || 'profile selection'} · ${story.llm_model}`));
         }
         const why = document.createElement('p');
         why.className = 'why';
         const whyLabel = document.createElement('strong');
         whyLabel.textContent = `${story.why_label || 'Why it appears'}: `;
         why.append(whyLabel, document.createTextNode(story.why || 'Recent feed candidate.'));
+
+        let decisionTrace = null;
+        if (story.llm_model && story.deterministic_explanation) {
+            decisionTrace = document.createElement('details');
+            decisionTrace.className = 'decision-trace';
+            const traceSummary = document.createElement('summary');
+            traceSummary.textContent = 'Compare deterministic basis';
+            const traceText = document.createElement('p');
+            traceText.textContent = story.deterministic_explanation;
+            decisionTrace.append(traceSummary, traceText);
+        }
 
         const details = document.createElement('div');
         details.className = 'story-card__details';
@@ -200,10 +248,36 @@
         arrow.textContent = '→';
         link.append(arrow);
 
-        article.append(meta, heading, summary);
+        let feedback = null;
+        if (story.article_id) {
+            feedback = document.createElement('div');
+            feedback.className = 'feedback-controls';
+            feedback.setAttribute('aria-label', 'Rate this selection');
+            const prompt = document.createElement('span');
+            prompt.textContent = 'Teach the profile:';
+            feedback.append(prompt);
+            Object.entries({ useful: 'Useful', too_minor: 'Too minor', wrong_category: 'Wrong category', not_useful: 'Not useful' })
+                .forEach(([action, label]) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.dataset.feedbackAction = action;
+                    button.textContent = label;
+                    button.setAttribute('aria-pressed', story.feedback_action === action ? 'true' : 'false');
+                    feedback.append(button);
+                });
+        }
+
+        article.append(meta);
+        if (topicTags) article.append(topicTags);
+        article.append(heading, summary);
         if (scoreStrip) article.append(scoreStrip);
         if (corroboration) article.append(corroboration);
-        article.append(why, details, link);
+        if (relatedLinks) article.append(relatedLinks);
+        if (intelligenceMeta) article.append(intelligenceMeta);
+        article.append(why);
+        if (decisionTrace) article.append(decisionTrace);
+        article.append(details, link);
+        if (feedback) article.append(feedback);
         return article;
     };
 
@@ -222,10 +296,20 @@
         if (batch && snapshot.batch_id) batch.textContent = snapshot.batch_id;
 
         const countLabel = snapshot.ranking_ready
-            ? `${snapshot.selected_count || 0} selected / ${snapshot.candidate_count || 0} evaluated · ${snapshot.cluster_count || 0} clusters · ${snapshot.archive_count || 0} archived`
+            ? (snapshot.llm_ready
+                ? `${snapshot.visible_count || 0} Gemma-selected / ${snapshot.selected_count || 0} deterministic · ${snapshot.archive_count || 0} archived`
+                : `${snapshot.selected_count || 0} deterministic / ${snapshot.candidate_count || 0} evaluated · ${snapshot.archive_count || 0} archived`)
             : `${snapshot.archive_count || 0} stored · ${(snapshot.stories || []).length} shown`;
         if (snapshot.status === 'ready') {
-            setSectionStatus(section, snapshot.stale ? 'partial' : 'ready', snapshot.stale ? `Ranked cache ready · background check due · ${countLabel}` : `Ranked briefing ready · ${countLabel}`);
+            if (snapshot.llm_ready) {
+                setSectionStatus(section, snapshot.stale ? 'partial' : 'ready', snapshot.stale ? `Gemma briefing cached · feed check due · ${countLabel}` : `Gemma briefing ready · ${countLabel}`);
+            } else if (['failed', 'cooldown', 'warning'].includes(snapshot.llm_status)) {
+                setSectionStatus(section, 'partial', `Deterministic fallback · local AI unavailable · ${countLabel}`);
+            } else if (snapshot.llm_status === 'disabled') {
+                setSectionStatus(section, 'partial', `Deterministic briefing · local AI disabled · ${countLabel}`);
+            } else {
+                setSectionStatus(section, 'partial', `Deterministic briefing ready · Gemma pending · ${countLabel}`);
+            }
         } else if (snapshot.status === 'partial') {
             setSectionStatus(section, 'partial', `Ranked briefing ready · some feeds unavailable · ${countLabel}`);
         } else if (snapshot.status === 'failed') {
@@ -298,25 +382,61 @@
         }
     };
 
+    const enrichNewsSection = async (section, quiet = false, trigger = 'manual_section') => {
+        const label = section.dataset.section;
+        const button = section.querySelector('[data-refresh-section]');
+        if (button) button.disabled = true;
+        setSectionStatus(section, 'working', 'Gemma is reading the Markdown profile and ranked survivors…');
+        try {
+            const response = await fetch(`/api/news.php?action=enrich&section=${encodeURIComponent(label)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trigger }),
+            });
+            const payload = await response.json();
+            if (payload.snapshot) applyNewsSnapshot(payload.snapshot, section);
+            if (!response.ok || !payload.ok) throw new Error(payload.error || 'Local-AI review could not start.');
+            const status = payload.enrichment?.status || 'failed';
+            if (!quiet) {
+                if (payload.warning) {
+                    showToast(`${payload.warning} Deterministic stories were retained.`);
+                } else if (status === 'cached') {
+                    showToast(`${label} already has a current Gemma review.`);
+                } else {
+                    showToast(`${label}: Gemma selected ${payload.snapshot?.visible_count || 0} stories.`);
+                }
+            }
+            return { ok: !['failed', 'cooldown', 'disabled'].includes(status), status, warning: payload.warning || null };
+        } catch (error) {
+            setSectionStatus(section, 'partial', 'Deterministic fallback · local AI unavailable');
+            if (!quiet) showToast(error.message || 'The local model is unavailable. Deterministic stories were retained.');
+            return { ok: false, status: 'failed', warning: error.message || null };
+        } finally {
+            if (button) button.disabled = false;
+        }
+    };
+
     const updateSection = async (section, quiet = false, trigger = 'manual_section') => {
         if (section.dataset.section === 'finance') {
             const [marketsOk, newsOk] = await Promise.all([
                 refreshFinanceSection(section, true, trigger, false),
                 refreshNewsSection(section, true, trigger, false),
             ]);
+            const aiReview = newsOk ? await enrichNewsSection(section, true, trigger) : { ok: false, status: 'skipped' };
             recordActivity('section_refresh', 'finance');
-            if (marketsOk && newsOk) {
-                setSectionStatus(section, 'ready', 'Live markets and finance-news intake checked');
-                if (!quiet) showToast('Finance markets and news intake refreshed.');
+            if (marketsOk && newsOk && aiReview.ok) {
+                if (!quiet) showToast('Finance markets, news, and Gemma review refreshed.');
             } else {
-                setSectionStatus(section, 'partial', 'Finance refresh partial · previous valid data retained');
-                if (!quiet) showToast('Finance refresh was partial. Previous valid data was retained.');
+                if (!quiet) showToast(aiReview.warning || 'Finance refresh was partial. Previous valid data was retained.');
             }
             return marketsOk || newsOk;
         }
 
         if (['breaking', 'crypto', 'ai'].includes(section.dataset.section)) {
-            return refreshNewsSection(section, quiet, trigger);
+            const refreshed = await refreshNewsSection(section, true, trigger);
+            if (!refreshed) return false;
+            const aiReview = await enrichNewsSection(section, quiet, trigger);
+            return refreshed || aiReview.ok;
         }
 
         const button = section.querySelector('[data-refresh-section]');
@@ -360,11 +480,27 @@
         refreshAll.addEventListener('click', async () => {
             refreshAll.disabled = true;
             refreshAll.innerHTML = '<span aria-hidden="true">↻</span> Preparing all sections…';
-            const sections = [...document.querySelectorAll('[data-section]')];
-            await Promise.all(sections.map((section) => updateSection(section, true, 'manual_all')));
+            const liveNames = ['breaking', 'finance', 'crypto', 'ai'];
+            const liveSections = liveNames.map((name) => document.querySelector(`[data-section="${name}"]`));
+            const financeSection = liveSections[1];
+            const mockSections = [...document.querySelectorAll('[data-section]')]
+                .filter((section) => !liveNames.includes(section.dataset.section));
+            const [marketOk, newsResults] = await Promise.all([
+                refreshFinanceSection(financeSection, true, 'manual_all', false),
+                Promise.all(liveSections.map((section) => refreshNewsSection(section, true, 'manual_all', false))),
+                Promise.all(mockSections.map((section) => updateSection(section, true, 'manual_all'))),
+            ]);
+            liveNames.forEach((name) => recordActivity('section_refresh', name));
+            let aiReady = 0;
+            for (let index = 0; index < liveSections.length; index += 1) {
+                if (!newsResults[index]) continue;
+                const result = await enrichNewsSection(liveSections[index], true, 'manual_all');
+                if (result.ok) aiReady += 1;
+            }
             refreshAll.disabled = false;
             refreshAll.innerHTML = '<span aria-hidden="true">↻</span> Refresh all';
-            showToast('All live sections checked; demonstration sections updated locally.');
+            const feedsReady = newsResults.filter(Boolean).length;
+            showToast(`${feedsReady}/4 news groups checked · ${aiReady}/4 Gemma reviews ready · markets ${marketOk ? 'ready' : 'partial'}.`);
         });
     }
 
@@ -376,6 +512,37 @@
     }
 
     document.addEventListener('click', (event) => {
+        const feedbackButton = event.target.closest?.('[data-feedback-action]');
+        if (feedbackButton) {
+            const article = feedbackButton.closest('[data-article-id]');
+            const section = feedbackButton.closest('[data-section]')?.dataset.section;
+            if (!article || !section) return;
+            const controls = feedbackButton.closest('.feedback-controls');
+            const buttons = [...controls.querySelectorAll('button')];
+            buttons.forEach((button) => { button.disabled = true; });
+            void fetch('/api/feedback.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    article_id: Number(article.dataset.articleId),
+                    section,
+                    action: feedbackButton.dataset.feedbackAction,
+                }),
+            }).then(async (response) => {
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Feedback could not be saved.');
+                buttons.forEach((button) => button.setAttribute(
+                    'aria-pressed',
+                    button === feedbackButton ? 'true' : 'false',
+                ));
+                showToast('Feedback saved. Gemma will receive it on the next review.');
+            }).catch((error) => {
+                showToast(error.message || 'Feedback could not be saved.');
+            }).finally(() => {
+                buttons.forEach((button) => { button.disabled = false; });
+            });
+            return;
+        }
         const link = event.target.closest?.('[data-track-link]');
         if (!link) return;
         const section = link.closest('[data-section]')?.dataset.section || 'other';
@@ -453,15 +620,25 @@
                     jobs.push(refreshNewsSection(section, true, 'page_open'));
                 }
             });
-
-            if (checksNeeded === 0) {
-                backgroundState.textContent = 'All live caches already ready';
-                return;
+            if (checksNeeded > 0) {
+                backgroundState.textContent = `Preparing ${checksNeeded} live cache${checksNeeded === 1 ? '' : 's'}…`;
+                await Promise.all(jobs);
             }
-            backgroundState.textContent = `Preparing ${checksNeeded} live cache${checksNeeded === 1 ? '' : 's'}…`;
-            const results = await Promise.all(jobs);
-            const succeeded = results.filter(Boolean).length;
-            backgroundState.textContent = succeeded === results.length ? 'All live caches ready' : `${succeeded}/${results.length} live checks succeeded`;
+
+            backgroundState.textContent = 'Gemma review queue: checking four sections sequentially…';
+            let aiReady = 0;
+            for (const sectionName of liveNewsSections) {
+                const section = document.querySelector(`[data-section="${sectionName}"]`);
+                const result = await enrichNewsSection(section, true, 'page_open');
+                if (result.ok) {
+                    aiReady += 1;
+                    continue;
+                }
+                if (['failed', 'cooldown', 'disabled'].includes(result.status)) break;
+            }
+            backgroundState.textContent = aiReady === liveNewsSections.length
+                ? 'Live caches and all Gemma reviews ready'
+                : `Live caches ready · ${aiReady}/4 Gemma reviews ready · deterministic fallback active`;
         }).catch(() => {
             backgroundState.textContent = 'Background checks unavailable';
         });

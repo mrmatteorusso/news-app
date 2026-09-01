@@ -111,6 +111,16 @@ final class NewsRepository
                     last_seen_at = excluded.last_seen_at,
                     last_batch_id = excluded.last_batch_id'
             );
+            $tagStatement = $this->pdo->prepare(
+                'INSERT INTO topic_tags (slug, label) VALUES (:slug, :label)
+                 ON CONFLICT(slug) DO UPDATE SET label = excluded.label'
+            );
+            $articleTagStatement = $this->pdo->prepare(
+                'INSERT INTO article_tags (article_id, tag_slug, assigned_at)
+                 VALUES (:article_id, :tag_slug, :assigned_at)
+                 ON CONFLICT(article_id, tag_slug) DO UPDATE SET assigned_at = excluded.assigned_at'
+            );
+            $clearArticleTags = $this->pdo->prepare('DELETE FROM article_tags WHERE article_id = :article_id');
 
             foreach ($items as $item) {
                 $articleStatement->execute([
@@ -131,13 +141,25 @@ final class NewsRepository
                 if ($articleId === false) {
                     continue;
                 }
-                $sectionStatement->execute([
-                    ':article_id' => (int) $articleId,
-                    ':section' => $displaySection,
-                    ':first_seen_at' => $completedAt,
-                    ':last_seen_at' => $completedAt,
-                    ':last_batch_id' => $batchId,
-                ]);
+                $sections = array_values(array_unique([$displaySection, ...($item['extra_sections'] ?? [])]));
+                foreach ($sections as $section) {
+                    $sectionStatement->execute([
+                        ':article_id' => (int) $articleId,
+                        ':section' => $section,
+                        ':first_seen_at' => $completedAt,
+                        ':last_seen_at' => $completedAt,
+                        ':last_batch_id' => $batchId,
+                    ]);
+                }
+                $clearArticleTags->execute([':article_id' => (int) $articleId]);
+                foreach ($item['topic_tags'] ?? [] as $tag) {
+                    $tagStatement->execute([':slug' => $tag['slug'], ':label' => $tag['label']]);
+                    $articleTagStatement->execute([
+                        ':article_id' => (int) $articleId,
+                        ':tag_slug' => $tag['slug'],
+                        ':assigned_at' => $completedAt,
+                    ]);
+                }
             }
 
             $batchStatement = $this->pdo->prepare(
@@ -214,7 +236,13 @@ final class NewsRepository
         return is_string($lastSuccess) && strtotime($lastSuccess . ' UTC') >= time() - ($minutes * 60);
     }
 
-    public function latestSnapshot(string $displaySection, string $stateKey, int $cacheMinutes, int $limit): array
+    public function latestSnapshot(
+        string $displaySection,
+        string $stateKey,
+        int $cacheMinutes,
+        int $limit,
+        ?array $llmContext = null,
+    ): array
     {
         $rankingStatement = $this->pdo->prepare(
             "SELECT rr.*
@@ -228,18 +256,58 @@ final class NewsRepository
         $rankingRun = $rankingStatement->fetch() ?: null;
 
         if ($rankingRun !== null) {
+            $hasCurrentLlmRun = false;
+            if ($llmContext !== null) {
+                $llmRunStatement = $this->pdo->prepare(
+                    "SELECT 1 FROM llm_runs
+                     WHERE batch_id = :batch_id AND section = :section
+                       AND model = :model AND prompt_version = :prompt_version
+                       AND profile_hash = :profile_hash AND status IN ('success', 'skipped')
+                     LIMIT 1"
+                );
+                $llmRunStatement->execute([
+                    ':batch_id' => $rankingRun['batch_id'],
+                    ':section' => $displaySection,
+                    ':model' => $llmContext['model'],
+                    ':prompt_version' => $llmContext['prompt_version'],
+                    ':profile_hash' => $llmContext['profile_hash'],
+                ]);
+                $hasCurrentLlmRun = $llmRunStatement->fetchColumn() !== false;
+            }
+            $llmCurrentExpression = $llmContext === null
+                ? '0'
+                : '(ae.llm_prompt_version = :llm_prompt_version
+                    AND ae.llm_profile_hash = :llm_profile_hash
+                    AND ae.llm_requested_model = :llm_requested_model
+                    AND ae.llm_model IS NOT NULL)';
+            $selectionExpression = $hasCurrentLlmRun
+                ? '(' . $llmCurrentExpression . ' AND ae.llm_selected = 1)'
+                : '1 = 1';
             $statement = $this->pdo->prepare(
                 'SELECT a.*, s.name AS source_name, s.source_type, s.trust_level, s.geography,
                         ae.deterministic_score, ae.importance_score, ae.relevance_score,
                         ae.evidence_confidence, ae.practical_impact_score, ae.novelty_score,
-                        ae.why_selected, ae.ranking_version, sc.id AS cluster_id,
+                        ae.summary AS evaluated_summary, ae.why_selected,
+                        ae.deterministic_explanation, ae.business_angle, ae.llm_model,
+                        ae.llm_selected, ae.llm_relevance_score, ae.llm_requested_model, ae.llm_evaluated_at,
+                        ae.ranking_version, sc.id AS cluster_id,
+                        ' . $llmCurrentExpression . ' AS llm_current,
                         COUNT(DISTINCT ca.article_id) AS cluster_article_count,
                         COUNT(DISTINCT related.source_id) AS cluster_source_count,
                         COUNT(DISTINCT CASE
                             WHEN related_source.trust_level >= 3
                              AND related_source.source_type NOT IN (\'signal\', \'contrarian\')
                             THEN related.source_id END) AS cluster_evidence_source_count,
-                        GROUP_CONCAT(DISTINCT related_source.name) AS related_sources
+                        GROUP_CONCAT(DISTINCT related_source.name) AS related_sources,
+                        GROUP_CONCAT(DISTINCT CASE WHEN related.id <> a.id
+                            THEN related_source.name || char(31) || related.canonical_url END) AS related_links_raw,
+                        (SELECT GROUP_CONCAT(tt.label)
+                         FROM article_tags art
+                         INNER JOIN topic_tags tt ON tt.slug = art.tag_slug
+                         WHERE art.article_id = a.id) AS topic_tags,
+                        (SELECT fe.action FROM feedback_events fe
+                         WHERE fe.article_id = a.id AND fe.section = sc.section
+                         ORDER BY fe.id DESC LIMIT 1) AS feedback_action
                  FROM story_clusters sc
                  INNER JOIN articles a ON a.id = sc.representative_article_id
                  INNER JOIN sources s ON s.id = a.source_id
@@ -249,6 +317,7 @@ final class NewsRepository
                  LEFT JOIN articles related ON related.id = ca.article_id
                  LEFT JOIN sources related_source ON related_source.id = related.source_id
                  WHERE sc.batch_id = :batch_id AND sc.section = :section AND ae.selected = 1
+                   AND ' . $selectionExpression . '
                    AND (a.expires_at IS NULL OR a.expires_at >= :now)
                  GROUP BY sc.id, a.id, ae.id
                  ORDER BY ae.deterministic_score DESC,
@@ -259,6 +328,11 @@ final class NewsRepository
             $statement->bindValue(':section', $displaySection);
             $statement->bindValue(':now', gmdate('Y-m-d H:i:s'));
             $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+            if ($llmContext !== null) {
+                $statement->bindValue(':llm_prompt_version', $llmContext['prompt_version']);
+                $statement->bindValue(':llm_profile_hash', $llmContext['profile_hash']);
+                $statement->bindValue(':llm_requested_model', $llmContext['model']);
+            }
             $statement->execute();
             $articles = $statement->fetchAll();
         } else {

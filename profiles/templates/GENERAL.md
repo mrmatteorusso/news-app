@@ -30,7 +30,6 @@ Exclude clickbait, celebrity gossip, routine sport, minor political statements, 
 
 ## How PHP will use this file
 
-PHP reads this file as plain text and combines it with exactly one category profile. It then sends Qwen only the candidates that survived deterministic filtering. Qwen returns strict JSON; PHP validates the JSON and stores the scores, explanation, and selected flag in SQLite.
+PHP reads this file as plain text and combines it with exactly one category profile. It then sends the configured local model only the candidates that survived deterministic filtering. The model returns strict JSON; PHP validates the JSON and stores the scores, explanation, and selected flag in SQLite.
 
 The model does not remember this profile by itself. The application includes the relevant profile in every ranking request.
-

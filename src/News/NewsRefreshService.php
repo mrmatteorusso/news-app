@@ -8,9 +8,11 @@ final class NewsRefreshService
         private readonly NewsRepository $repository,
         private readonly FeedParser $parser,
         private readonly HttpClient $http,
+        private readonly TopicTagger $tagger,
         private readonly array $sources,
         private readonly array $config,
         private readonly RankingService $ranking,
+        private readonly LlmEnrichmentService $enrichment,
     ) {
     }
 
@@ -24,12 +26,7 @@ final class NewsRefreshService
                 'batch_id' => null,
                 'result' => ['status' => 'cached', 'candidate_count' => 0, 'warning' => null],
                 'ranking' => $ranking,
-                'snapshot' => $this->repository->latestSnapshot(
-                    $displaySection,
-                    $section['state_key'],
-                    $section['cache_minutes'],
-                    $section['display_limit'],
-                ),
+                'snapshot' => $this->currentSnapshot($displaySection, $section),
             ];
         }
 
@@ -80,6 +77,9 @@ final class NewsRefreshService
                             continue;
                         }
                         $item['source_id'] = $source['id'];
+                        $classification = $this->tagger->classify($item['title'], $item['excerpt'], $displaySection);
+                        $item['topic_tags'] = $classification['topics'];
+                        $item['extra_sections'] = $classification['extra_sections'];
                         $accepted[] = $item;
                         $itemsByUrl[$item['canonical_url']] = $item;
                     }
@@ -120,12 +120,7 @@ final class NewsRefreshService
                 'batch_id' => $batchId,
                 'result' => $result,
                 'ranking' => $ranking,
-                'snapshot' => $this->repository->latestSnapshot(
-                    $displaySection,
-                    $section['state_key'],
-                    $section['cache_minutes'],
-                    $section['display_limit'],
-                ),
+                'snapshot' => $this->currentSnapshot($displaySection, $section),
             ];
         } catch (Throwable $exception) {
             if (!$batchCompleted) {
@@ -139,12 +134,29 @@ final class NewsRefreshService
     {
         $section = $this->sectionConfig($displaySection);
         $this->attemptRanking($displaySection);
-        return $this->repository->latestSnapshot(
+        return $this->currentSnapshot($displaySection, $section);
+    }
+
+    private function currentSnapshot(string $displaySection, array $section): array
+    {
+        $llmContext = null;
+        try {
+            $llmContext = $this->enrichment->context($displaySection);
+        } catch (Throwable $exception) {
+            error_log('Unable to load Stage 5 profile context: ' . $exception->getMessage());
+        }
+        $snapshot = $this->repository->latestSnapshot(
             $displaySection,
             $section['state_key'],
             $section['cache_minutes'],
             $section['display_limit'],
+            $llmContext,
         );
+        $snapshot['llm_state'] = $this->enrichment->status(
+            $displaySection,
+            $snapshot['ranking_run']['batch_id'] ?? null,
+        );
+        return $snapshot;
     }
 
     private function attemptRanking(string $displaySection, ?string $batchId = null): array

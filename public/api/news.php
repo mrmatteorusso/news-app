@@ -27,7 +27,7 @@ try {
         news_respond(['ok' => true, 'section' => $section, 'snapshot' => news_snapshot($section)]);
     }
 
-    if ($action !== 'refresh' || $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    if (!in_array($action, ['refresh', 'enrich'], true) || $_SERVER['REQUEST_METHOD'] !== 'POST') {
         news_respond(['ok' => false, 'error' => 'Unsupported news API request.'], 405);
     }
 
@@ -35,6 +35,59 @@ try {
     $trigger = is_array($body) ? ($body['trigger'] ?? 'manual_section') : 'manual_section';
     if (!in_array($trigger, ['page_open', 'manual_section', 'manual_all'], true)) {
         news_respond(['ok' => false, 'error' => 'Invalid refresh trigger.'], 422);
+    }
+
+    if ($action === 'enrich') {
+        set_time_limit(300);
+        $storagePath = getenv('APP_STORAGE_PATH') ?: '/var/www/storage';
+        $localAiLockPath = rtrim($storagePath, '/\\') . '/local-ai-enrichment.lock';
+        $localAiLockHandle = fopen($localAiLockPath, 'c+');
+        if ($localAiLockHandle === false || !flock($localAiLockHandle, LOCK_EX | LOCK_NB)) {
+            if (is_resource($localAiLockHandle)) {
+                fclose($localAiLockHandle);
+            }
+            news_respond([
+                'ok' => false,
+                'busy' => true,
+                'error' => 'The local model is already reviewing another section. It will be tried sequentially.',
+                'snapshot' => news_snapshot($section),
+            ], 409);
+        }
+
+        $sectionLockPath = rtrim($storagePath, '/\\') . '/news-' . $section . '-refresh.lock';
+        $sectionLockHandle = fopen($sectionLockPath, 'c+');
+        if ($sectionLockHandle === false || !flock($sectionLockHandle, LOCK_EX | LOCK_NB)) {
+            if (is_resource($sectionLockHandle)) {
+                fclose($sectionLockHandle);
+            }
+            flock($localAiLockHandle, LOCK_UN);
+            fclose($localAiLockHandle);
+            news_respond([
+                'ok' => false,
+                'busy' => true,
+                'error' => 'This section is still refreshing its feeds. Local-AI review will follow when it is ready.',
+                'snapshot' => news_snapshot($section),
+            ], 409);
+        }
+        try {
+            $enrichment = llm_enrichment_service()->enrich($section, null, $trigger !== 'page_open');
+        } finally {
+            flock($sectionLockHandle, LOCK_UN);
+            fclose($sectionLockHandle);
+            flock($localAiLockHandle, LOCK_UN);
+            fclose($localAiLockHandle);
+        }
+        $snapshot = news_snapshot($section);
+        $warning = in_array($enrichment['status'], ['failed', 'cooldown', 'disabled'], true)
+            ? ($enrichment['message'] ?? 'The local model is unavailable. The deterministic briefing remains visible.')
+            : null;
+        news_respond([
+            'ok' => true,
+            'section' => $section,
+            'enrichment' => $enrichment,
+            'warning' => $warning,
+            'snapshot' => $snapshot,
+        ]);
     }
 
     set_time_limit(120);

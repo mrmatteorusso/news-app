@@ -94,7 +94,7 @@ stage4Ensure($result['selected_count'] === 1, 'Only one representative of the co
 stage4Ensure((int) $pdo->query('SELECT COUNT(*) FROM article_evaluations')->fetchColumn() === 3, 'Article-level evaluations were not retained.');
 stage4Ensure((int) $pdo->query("SELECT COUNT(*) FROM article_evaluations WHERE selected = 1")->fetchColumn() === 1, 'Exactly one cluster representative should be selected.');
 stage4Ensure((int) $pdo->query("SELECT selected FROM article_evaluations ae INNER JOIN articles a ON a.id = ae.article_id WHERE a.source_id = 'signal'")->fetchColumn() === 0, 'An unsupported community signal was promoted.');
-stage4Ensure((string) $pdo->query('SELECT ranking_version FROM article_evaluations LIMIT 1')->fetchColumn() === 'deterministic-v2', 'Ranking version was not persisted.');
+stage4Ensure((string) $pdo->query('SELECT ranking_version FROM article_evaluations LIMIT 1')->fetchColumn() === $rankingConfig['version'], 'Ranking version was not persisted.');
 
 $snapshot = $newsRepository->latestSnapshot('breaking', 'breaking', 15, 24);
 stage4Ensure($snapshot['ranking_ready'] === true, 'The latest successful ranking run was not found.');
@@ -106,8 +106,19 @@ stage4Ensure((int) $snapshot['articles'][0]['importance_score'] > 0, 'The score 
 
 $rankingRepository->recordFailure('TEST-RANK', 'breaking', 'synthetic-failed-version', 4, 'Synthetic ranking failure');
 $afterRankingFailure = $newsRepository->latestSnapshot('breaking', 'breaking', 15, 24);
-stage4Ensure($afterRankingFailure['ranking_run']['ranking_version'] === 'deterministic-v2', 'A failed ranking replaced the last successful ranked version.');
+stage4Ensure($afterRankingFailure['ranking_run']['ranking_version'] === $rankingConfig['version'], 'A failed ranking replaced the last successful ranked version.');
 stage4Ensure(count($afterRankingFailure['articles']) === 1, 'A failed ranking removed the previous ranked briefing.');
+
+$driftFixture = static fn (int $id, string $title, float $score): array => [
+    'article' => ['id' => $id, 'title' => $title, 'published_at' => gmdate('Y-m-d H:i:s'), 'source_updated_at' => null],
+    'deterministic_score' => $score,
+];
+$driftClusters = (new StoryClusterer())->cluster([
+    $driftFixture(201, 'Alpha bravo charlie delta event', 90),
+    $driftFixture(202, 'Alpha bravo charlie echo foxtrot golf', 80),
+    $driftFixture(203, 'Echo foxtrot golf hotel event', 70),
+], 24);
+stage4Ensure(count($driftClusters) === 2, 'A cluster drifted through a related member into a different event.');
 
 $newsRepository->startBatch('TEST-RANK-FAIL', 'breaking', 'manual_section');
 $newsRepository->completeBatch('TEST-RANK-FAIL', 'breaking', 'breaking', [], [[

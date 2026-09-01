@@ -120,7 +120,7 @@ $sourceSummary = [
 
 $activityMetrics = (new TelemetryRepository(Database::connection()))->metrics($analyticsSections);
 $metricTotal = static fn (string $key): int => array_sum(array_column($activityMetrics, $key));
-$qwenValues = static function (string $key) use ($activityMetrics): array {
+$localAiValues = static function (string $key) use ($activityMetrics): array {
     return array_values(array_filter(
         array_column($activityMetrics, $key),
         static fn (mixed $value): bool => $value !== null,
@@ -135,9 +135,13 @@ $scansTotal = $metricTotal('scans_total');
 $scans7d = $metricTotal('scans_7d');
 $apiTotal = $metricTotal('api_total');
 $api7d = $metricTotal('api_7d');
-$qwenTotal = $average($qwenValues('qwen_total_ms'));
-$qwen7d = $average($qwenValues('qwen_7d_ms'));
+$localAiTotal = $average($localAiValues('local_ai_total_ms'));
+$localAi7d = $average($localAiValues('local_ai_7d_ms'));
 $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
+$localAiSectionStatuses = [];
+foreach (['breaking' => 'Critical', 'finance' => 'Finance', 'crypto' => 'Crypto', 'ai' => 'AI / Tech'] as $key => $label) {
+    $localAiSectionStatuses[$key] = ['label' => $label, ...llm_enrichment_service()->status($key)];
+}
 ?>
 <!doctype html>
 <html lang="en" data-theme="light">
@@ -178,8 +182,8 @@ $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 4 · Live source and ranking health</strong>
-            <span>Market providers and free news feeds are live; successful news batches are ranked and clustered in SQLite. “Planned” rows need source-specific adapters and do not populate SQLite yet.</span>
+            <strong>Stage 5 · Retrieval, ranking, and local-AI health</strong>
+            <span>Market providers and free news feeds are live; PHP ranks event clusters before Gemma makes minimal keep/reject decisions. LM Studio failures never erase the previous valid briefing.</span>
         </div>
 
         <section class="status-summary" aria-label="Source summary">
@@ -195,7 +199,7 @@ $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
                     <p class="overline">Activity and processing</p>
                     <h2>Usage telemetry</h2>
                 </div>
-                <p>SQLite stores refreshes, opened links, market API calls, and per-feed PHP scans. Qwen timing remains inactive until Stage 5.</p>
+                <p>SQLite stores refreshes, opened links, market API calls, per-feed PHP scans, and every local-model success or failure with timing.</p>
             </div>
 
             <div class="analytics-cards">
@@ -204,7 +208,7 @@ $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
                 <article><span>Links opened</span><strong><?= e($linksTotal) ?></strong><small><?= e($links7d) ?> in last 7 days</small></article>
                 <article><span>PHP source scans</span><strong><?= e($scansTotal) ?></strong><small><?= e($scans7d) ?> in last 7 days</small></article>
                 <article><span>External API calls</span><strong><?= e($apiTotal) ?></strong><small><?= e($api7d) ?> in last 7 days</small></article>
-                <article><span>Qwen processing</span><strong><?= e(duration_label($qwenTotal)) ?></strong><small><?= e(duration_label($qwen7d)) ?> average in last 7 days</small></article>
+                <article><span>Gemma processing</span><strong><?= e(duration_label($localAiTotal)) ?></strong><small><?= e(duration_label($localAi7d)) ?> average in last 7 days</small></article>
             </div>
 
             <div class="source-table-wrap analytics-table-wrap">
@@ -217,7 +221,7 @@ $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
                             <th>Links opened<br>Total / 7d</th>
                             <th>PHP scans<br>Total / 7d</th>
                             <th>API calls<br>Total / 7d</th>
-                            <th>Qwen average<br>Total / 7d</th>
+                            <th>Local-AI average<br>Total / 7d</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -230,13 +234,46 @@ $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
                                 <td><?= e($metric['links_total']) ?> / <?= e($metric['links_7d']) ?></td>
                                 <td><?= e($metric['scans_total']) ?> / <?= e($metric['scans_7d']) ?></td>
                                 <td><?= e($metric['api_total']) ?> / <?= e($metric['api_7d']) ?></td>
-                                <td><?= e(duration_label($metric['qwen_total_ms'])) ?> / <?= e(duration_label($metric['qwen_7d_ms'])) ?></td>
+                                <td><?= e(duration_label($metric['local_ai_total_ms'])) ?> / <?= e(duration_label($metric['local_ai_7d_ms'])) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
             <p class="analytics-footnote">Durable totals start with Stage 2 and are stored in the local SQLite database. Browser-only counts from Stage 1 are not imported.</p>
+        </section>
+
+        <section class="source-table-card">
+            <div class="source-table__header">
+                <div>
+                    <p class="overline">Local model connection</p>
+                    <h2>Gemma section status</h2>
+                </div>
+                <p>Requests run one section at a time to protect local memory.</p>
+            </div>
+            <div class="source-table-wrap">
+                <table class="source-table">
+                    <thead><tr><th>Status</th><th>Category</th><th>Model</th><th>Last run</th><th>Duration</th><th>Detail</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($localAiSectionStatuses as $localAiStatus): ?>
+                            <?php
+                                $run = $localAiStatus['run'] ?? null;
+                                $health = in_array($localAiStatus['state'], ['ready', 'empty'], true)
+                                    ? 'healthy'
+                                    : (in_array($localAiStatus['state'], ['failed'], true) ? 'down' : 'warning');
+                            ?>
+                            <tr>
+                                <td><span class="health-pill health-pill--<?= e($health) ?>"><span></span><?= e(ucfirst($localAiStatus['state'])) ?></span></td>
+                                <td><strong><?= e($localAiStatus['label']) ?></strong></td>
+                                <td><?= e($run['resolved_model'] ?? $run['model'] ?? llm_config()['model']) ?></td>
+                                <td><?= e(status_time($run['completed_at'] ?? null)) ?></td>
+                                <td><?= e(duration_label(isset($run['duration_ms']) ? (float) $run['duration_ms'] : null)) ?></td>
+                                <td><?= e($localAiStatus['message']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </section>
 
         <section class="source-table-card">

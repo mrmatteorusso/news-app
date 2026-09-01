@@ -77,6 +77,18 @@ CREATE TABLE IF NOT EXISTS article_sections (
     PRIMARY KEY (article_id, section)
 );
 
+CREATE TABLE IF NOT EXISTS topic_tags (
+    slug TEXT PRIMARY KEY,
+    label TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS article_tags (
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    tag_slug TEXT NOT NULL REFERENCES topic_tags(slug) ON DELETE CASCADE,
+    assigned_at TEXT NOT NULL,
+    PRIMARY KEY (article_id, tag_slug)
+);
+
 CREATE TABLE IF NOT EXISTS article_evaluations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
@@ -93,6 +105,13 @@ CREATE TABLE IF NOT EXISTS article_evaluations (
     why_selected TEXT,
     business_angle TEXT,
     llm_model TEXT,
+    deterministic_explanation TEXT,
+    llm_selected INTEGER CHECK (llm_selected IN (0, 1)),
+    llm_relevance_score INTEGER CHECK (llm_relevance_score BETWEEN 0 AND 100),
+    llm_requested_model TEXT,
+    llm_prompt_version TEXT,
+    llm_profile_hash TEXT,
+    llm_evaluated_at TEXT,
     ranking_version TEXT NOT NULL DEFAULT 'unversioned',
     evaluated_at TEXT NOT NULL,
     UNIQUE (article_id, batch_id, section)
@@ -162,7 +181,12 @@ CREATE TABLE IF NOT EXISTS llm_runs (
     batch_id TEXT NOT NULL REFERENCES refresh_batches(id) ON DELETE CASCADE,
     section TEXT NOT NULL,
     model TEXT NOT NULL,
+    resolved_model TEXT,
+    prompt_version TEXT NOT NULL DEFAULT 'legacy',
+    profile_hash TEXT NOT NULL DEFAULT '',
     candidate_count INTEGER NOT NULL DEFAULT 0,
+    selected_count INTEGER NOT NULL DEFAULT 0,
+    chunk_count INTEGER NOT NULL DEFAULT 1,
     prompt_tokens INTEGER,
     completion_tokens INTEGER,
     duration_ms INTEGER NOT NULL,
@@ -202,6 +226,9 @@ ON articles(expires_at);
 CREATE INDEX IF NOT EXISTS idx_article_sections_section_seen
 ON article_sections(section, last_seen_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_article_tags_slug
+ON article_tags(tag_slug, article_id);
+
 CREATE INDEX IF NOT EXISTS idx_evaluations_batch_section_selected
 ON article_evaluations(batch_id, section, selected);
 
@@ -231,4 +258,4 @@ ON ranking_runs(section, completed_at DESC);
 
 PRAGMA optimize;
 
-PRAGMA user_version = 4;
+PRAGMA user_version = 6;

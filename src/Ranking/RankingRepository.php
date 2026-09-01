@@ -71,11 +71,13 @@ final class RankingRepository
                 'INSERT INTO article_evaluations
                     (article_id, batch_id, section, deterministic_score, importance_score, relevance_score,
                      evidence_confidence, practical_impact_score, novelty_score, selected, summary,
-                     why_selected, business_angle, llm_model, ranking_version, evaluated_at)
+                     why_selected, business_angle, llm_model, deterministic_explanation,
+                     ranking_version, evaluated_at)
                  VALUES
                     (:article_id, :batch_id, :section, :deterministic_score, :importance_score, :relevance_score,
                      :evidence_confidence, :practical_impact_score, :novelty_score, :selected, :summary,
-                     :why_selected, NULL, NULL, :ranking_version, :evaluated_at)'
+                     :why_selected, NULL, NULL, :deterministic_explanation,
+                     :ranking_version, :evaluated_at)'
             );
             foreach ($evaluations as $evaluation) {
                 $scores = $evaluation['scores'];
@@ -92,6 +94,7 @@ final class RankingRepository
                     ':selected' => $evaluation['selected'] ? 1 : 0,
                     ':summary' => $evaluation['article']['excerpt'],
                     ':why_selected' => $evaluation['why'],
+                    ':deterministic_explanation' => $evaluation['why'],
                     ':ranking_version' => $version,
                     ':evaluated_at' => $evaluatedAt,
                 ]);

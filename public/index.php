@@ -68,13 +68,19 @@ foreach (['breaking', 'finance', 'crypto', 'ai'] as $newsSection) {
 
 $newsStateLabel = static function (array $snapshot): string {
     $countLabel = !empty($snapshot['ranking_ready'])
-        ? sprintf(
-            '%d selected / %d evaluated · %d clusters · %d archived',
-            (int) ($snapshot['selected_count'] ?? 0),
-            (int) ($snapshot['candidate_count'] ?? 0),
-            (int) ($snapshot['cluster_count'] ?? 0),
-            (int) ($snapshot['archive_count'] ?? 0),
-        )
+        ? (!empty($snapshot['llm_ready'])
+            ? sprintf(
+                '%d Gemma-selected / %d deterministic · %d archived',
+                (int) ($snapshot['visible_count'] ?? 0),
+                (int) ($snapshot['selected_count'] ?? 0),
+                (int) ($snapshot['archive_count'] ?? 0),
+            )
+            : sprintf(
+                '%d deterministic / %d evaluated · %d archived',
+                (int) ($snapshot['selected_count'] ?? 0),
+                (int) ($snapshot['candidate_count'] ?? 0),
+                (int) ($snapshot['archive_count'] ?? 0),
+            ))
         : sprintf('%d stored · ranking pending', (int) ($snapshot['archive_count'] ?? 0));
     if ($snapshot['status'] === 'failed') {
         return ($snapshot['archive_count'] ?? 0) > 0 ? 'Feed check failed · previous ranked briefing retained · ' . $countLabel : 'Feed check unavailable';
@@ -83,7 +89,12 @@ $newsStateLabel = static function (array $snapshot): string {
         return 'Ranked briefing ready · some feeds unavailable · ' . $countLabel;
     }
     if ($snapshot['status'] === 'ready') {
-        return ($snapshot['stale'] ? 'Ranked cache ready · background check due · ' : 'Ranked briefing ready · ') . $countLabel;
+        $intelligence = !empty($snapshot['llm_ready'])
+            ? 'Gemma briefing ready · '
+            : (in_array($snapshot['llm_status'] ?? 'pending', ['failed', 'cooldown', 'warning'], true)
+                ? 'Deterministic fallback · local AI unavailable · '
+                : 'Deterministic briefing ready · Gemma pending · ');
+        return ($snapshot['stale'] ? 'Feed check due · ' : '') . $intelligence . $countLabel;
     }
     return 'Waiting for first feed check';
 };
@@ -157,8 +168,8 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 4 · Deterministic briefing</strong>
-            <span>Breaking, finance, crypto, and AI are scored against transparent category rules, clustered into distinct stories, and strengthened only by corroboration from different publishers. Qwen is still inactive; X, Italy, and local remain demonstration sections.</span>
+            <strong>Stage 5 · Local Gemma intelligence</strong>
+            <span>Gemma 3 4B makes only the final keep/reject decision for PHP-ranked event clusters. Publisher titles and excerpts are never rewritten; invalid local-model output leaves the previous valid briefing untouched.</span>
         </div>
 
         <section class="briefing-meta" aria-label="Briefing status">
@@ -168,7 +179,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             </div>
             <div>
                 <span class="meta-label">Data status</span>
-                <strong><span class="status-dot status-dot--<?= e($financeStatus) ?>"></span> Markets + live feed intake</strong>
+                <strong><span class="status-dot status-dot--<?= e($financeStatus) ?>"></span> Markets + ranked news + local AI</strong>
             </div>
             <div>
                 <span class="meta-label">Reading target</span>
@@ -186,7 +197,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             <div class="story-grid story-grid--featured" data-news-grid>
                 <?php foreach ($breakingStories as $story) { render_story($story, 'story-card--breaking'); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $breakingStories !== [] ? ' hidden' : '' ?>>No major breaking event currently passes the deterministic threshold. Stored candidates remain in the archive.</p>
+            <p class="empty-state" data-news-empty<?= $breakingStories !== [] ? ' hidden' : '' ?>>No major breaking event currently passes both the deterministic and profile-review filters. Stored candidates remain in the archive.</p>
         </section>
 
         <section class="dashboard-section" data-section="finance">
@@ -238,7 +249,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             <div class="story-grid" data-news-grid>
                 <?php foreach ($financeStories as $story) { render_story($story); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $financeStories !== [] ? ' hidden' : '' ?>>No stored finance candidate currently passes the ranking threshold. Market cards remain independent.</p>
+            <p class="empty-state" data-news-empty<?= $financeStories !== [] ? ' hidden' : '' ?>>No stored finance candidate currently passes the active briefing filters. Market cards remain independent.</p>
         </section>
 
         <section class="dashboard-section dashboard-section--crypto" data-section="crypto">
@@ -247,7 +258,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             <div class="story-grid" data-news-grid>
                 <?php foreach ($cryptoStories as $story) { render_story($story); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $cryptoStories !== [] ? ' hidden' : '' ?>>No stored crypto candidate currently passes the ranking threshold.</p>
+            <p class="empty-state" data-news-empty<?= $cryptoStories !== [] ? ' hidden' : '' ?>>No stored crypto candidate currently passes the active briefing filters.</p>
         </section>
 
         <section class="dashboard-section" data-section="ai">
@@ -256,7 +267,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             <div class="story-grid" data-news-grid>
                 <?php foreach ($aiStories as $story) { render_story($story); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $aiStories !== [] ? ' hidden' : '' ?>>No stored AI / technology candidate currently passes the ranking threshold.</p>
+            <p class="empty-state" data-news-empty<?= $aiStories !== [] ? ' hidden' : '' ?>>No stored AI / technology candidate currently passes the active briefing filters.</p>
         </section>
 
         <section class="dashboard-section dashboard-section--signals" data-section="x">
@@ -296,9 +307,9 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
         <aside class="method-note">
             <div>
                 <p class="overline">Current pipeline</p>
-                <h2>Safe intake. Explainable ranking. Qwen later.</h2>
+                <h2>Safe intake. Explainable ranking. Local profile review.</h2>
             </div>
-            <p>Stage 4 reads stored titles and short feed excerpts, scores importance, relevance, evidence, practical impact, and novelty, then shows one representative per story cluster. Every candidate and score stays in SQLite. In Stage 5, Qwen3.5 4B will read only these survivors plus the relevant Markdown profile to refine summaries and explanations.</p>
+            <p>PHP controls retrieval, storage, categories, topic tags, dates, source evidence, scoring, and event clustering. Gemma reads only shortlisted metadata plus the relevant Markdown profiles and returns keep/reject with a restricted reason code. It never visits article websites or rewrites publisher text.</p>
         </aside>
     </main>
 
