@@ -10,6 +10,7 @@ final class NewsRefreshService
         private readonly HttpClient $http,
         private readonly array $sources,
         private readonly array $config,
+        private readonly RankingService $ranking,
     ) {
     }
 
@@ -17,10 +18,12 @@ final class NewsRefreshService
     {
         $section = $this->sectionConfig($displaySection);
         if ($trigger === 'page_open' && $this->repository->isFresh($section['state_key'], $section['cache_minutes'])) {
+            $ranking = $this->attemptRanking($displaySection);
             return [
                 'skipped_cache' => true,
                 'batch_id' => null,
                 'result' => ['status' => 'cached', 'candidate_count' => 0, 'warning' => null],
+                'ranking' => $ranking,
                 'snapshot' => $this->repository->latestSnapshot(
                     $displaySection,
                     $section['state_key'],
@@ -32,11 +35,12 @@ final class NewsRefreshService
 
         $sources = $this->activeSources($section['source_category']);
         if ($sources === []) {
-            throw new RuntimeException('No active Stage 3 feeds are configured for this section.');
+            throw new RuntimeException('No active live feeds are configured for this section.');
         }
 
         $batchId = strtoupper(substr($section['state_key'], 0, 3)) . '-NEWS-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(3));
         $this->repository->startBatch($batchId, $section['state_key'], $trigger);
+        $batchCompleted = false;
 
         try {
             $requests = [];
@@ -107,10 +111,15 @@ final class NewsRefreshService
                 $calls,
                 $this->config['retention_days'],
             );
+            $batchCompleted = true;
+            $ranking = $result['status'] === 'failed'
+                ? ['ranked' => false, 'reason' => 'intake_failed']
+                : $this->attemptRanking($displaySection, $batchId);
             return [
                 'skipped_cache' => false,
                 'batch_id' => $batchId,
                 'result' => $result,
+                'ranking' => $ranking,
                 'snapshot' => $this->repository->latestSnapshot(
                     $displaySection,
                     $section['state_key'],
@@ -119,7 +128,9 @@ final class NewsRefreshService
                 ),
             ];
         } catch (Throwable $exception) {
-            $this->repository->failRunningBatch($batchId, $section['state_key'], $exception->getMessage());
+            if (!$batchCompleted) {
+                $this->repository->failRunningBatch($batchId, $section['state_key'], $exception->getMessage());
+            }
             throw $exception;
         }
     }
@@ -127,12 +138,27 @@ final class NewsRefreshService
     public function snapshot(string $displaySection): array
     {
         $section = $this->sectionConfig($displaySection);
+        $this->attemptRanking($displaySection);
         return $this->repository->latestSnapshot(
             $displaySection,
             $section['state_key'],
             $section['cache_minutes'],
             $section['display_limit'],
         );
+    }
+
+    private function attemptRanking(string $displaySection, ?string $batchId = null): array
+    {
+        try {
+            return $this->ranking->ensureRanked($displaySection, $batchId);
+        } catch (Throwable $exception) {
+            error_log(sprintf('Stage 4 ranking failed for %s: %s', $displaySection, $exception->getMessage()));
+            return [
+                'ranked' => false,
+                'reason' => 'ranking_failed',
+                'error' => $exception->getMessage(),
+            ];
+        }
     }
 
     public function activeSources(?string $sourceCategory = null): array

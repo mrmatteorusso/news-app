@@ -67,15 +67,23 @@ foreach (['breaking', 'finance', 'crypto', 'ai'] as $newsSection) {
 }
 
 $newsStateLabel = static function (array $snapshot): string {
-    $countLabel = sprintf('%d stored · %d shown', (int) ($snapshot['archive_count'] ?? 0), count($snapshot['stories'] ?? []));
+    $countLabel = !empty($snapshot['ranking_ready'])
+        ? sprintf(
+            '%d selected / %d evaluated · %d clusters · %d archived',
+            (int) ($snapshot['selected_count'] ?? 0),
+            (int) ($snapshot['candidate_count'] ?? 0),
+            (int) ($snapshot['cluster_count'] ?? 0),
+            (int) ($snapshot['archive_count'] ?? 0),
+        )
+        : sprintf('%d stored · ranking pending', (int) ($snapshot['archive_count'] ?? 0));
     if ($snapshot['status'] === 'failed') {
-        return $snapshot['has_data'] ? 'Feed check failed · previous intake retained · ' . $countLabel : 'Feed check unavailable';
+        return ($snapshot['archive_count'] ?? 0) > 0 ? 'Feed check failed · previous ranked briefing retained · ' . $countLabel : 'Feed check unavailable';
     }
     if ($snapshot['status'] === 'partial') {
-        return 'Live intake ready · some feeds unavailable · ' . $countLabel;
+        return 'Ranked briefing ready · some feeds unavailable · ' . $countLabel;
     }
     if ($snapshot['status'] === 'ready') {
-        return ($snapshot['stale'] ? 'Live intake cached · background check due · ' : 'Live intake ready · ') . $countLabel;
+        return ($snapshot['stale'] ? 'Ranked cache ready · background check due · ' : 'Ranked briefing ready · ') . $countLabel;
     }
     return 'Waiting for first feed check';
 };
@@ -132,6 +140,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
         <nav class="topnav" aria-label="Primary navigation">
             <a class="topnav__link topnav__link--active" href="/">Dashboard</a>
             <a class="topnav__link" href="/source-status.php">Source status</a>
+            <a class="topnav__link" href="/methodology.php">Ranking method</a>
             <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">◐ <span>Theme</span></button>
         </nav>
     </header>
@@ -148,8 +157,8 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 3 · Live feed intake</strong>
-            <span>Breaking, finance, crypto, and AI now come from free live feeds and persist in SQLite. They are intake candidates—not yet importance-ranked by Stage 4 or judged by Qwen. X, Italy, and local remain demonstration sections.</span>
+            <strong>Stage 4 · Deterministic briefing</strong>
+            <span>Breaking, finance, crypto, and AI are scored against transparent category rules, clustered into distinct stories, and strengthened only by corroboration from different publishers. Qwen is still inactive; X, Italy, and local remain demonstration sections.</span>
         </div>
 
         <section class="briefing-meta" aria-label="Briefing status">
@@ -173,11 +182,11 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
 
         <section class="dashboard-section dashboard-section--breaking" data-section="breaking">
             <?php render_section_header($sections['breaking']); ?>
-            <p class="section-note"><strong>Stage 3 intake:</strong> these are recent source candidates. Critical-event ranking and cross-source corroboration arrive in Stage 4.</p>
+            <p class="section-note"><strong>Strict threshold:</strong> only unusually consequential events are selected. There is no quota, so this section may legitimately be empty.</p>
             <div class="story-grid story-grid--featured" data-news-grid>
                 <?php foreach ($breakingStories as $story) { render_story($story, 'story-card--breaking'); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $breakingStories !== [] ? ' hidden' : '' ?>>No live intake is stored yet. The background check starts when this page opens.</p>
+            <p class="empty-state" data-news-empty<?= $breakingStories !== [] ? ' hidden' : '' ?>>No major breaking event currently passes the deterministic threshold. Stored candidates remain in the archive.</p>
         </section>
 
         <section class="dashboard-section" data-section="finance">
@@ -229,7 +238,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             <div class="story-grid" data-news-grid>
                 <?php foreach ($financeStories as $story) { render_story($story); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $financeStories !== [] ? ' hidden' : '' ?>>No finance-news intake is stored yet. Market cards remain independent.</p>
+            <p class="empty-state" data-news-empty<?= $financeStories !== [] ? ' hidden' : '' ?>>No stored finance candidate currently passes the ranking threshold. Market cards remain independent.</p>
         </section>
 
         <section class="dashboard-section dashboard-section--crypto" data-section="crypto">
@@ -238,16 +247,16 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             <div class="story-grid" data-news-grid>
                 <?php foreach ($cryptoStories as $story) { render_story($story); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $cryptoStories !== [] ? ' hidden' : '' ?>>No crypto-news intake is stored yet.</p>
+            <p class="empty-state" data-news-empty<?= $cryptoStories !== [] ? ' hidden' : '' ?>>No stored crypto candidate currently passes the ranking threshold.</p>
         </section>
 
         <section class="dashboard-section" data-section="ai">
             <?php render_section_header($sections['ai']); ?>
-            <p class="section-note"><strong>Stage 3 intake:</strong> official announcements, field experts, community discovery, and Chinese open-model updates are kept visibly distinct by source type.</p>
+            <p class="section-note"><strong>Evidence policy:</strong> official announcements, field experts, community discovery, and Chinese open-model updates remain visibly distinct. Signals cannot be promoted as fact without a reputable source.</p>
             <div class="story-grid" data-news-grid>
                 <?php foreach ($aiStories as $story) { render_story($story); } ?>
             </div>
-            <p class="empty-state" data-news-empty<?= $aiStories !== [] ? ' hidden' : '' ?>>No AI / technology intake is stored yet.</p>
+            <p class="empty-state" data-news-empty<?= $aiStories !== [] ? ' hidden' : '' ?>>No stored AI / technology candidate currently passes the ranking threshold.</p>
         </section>
 
         <section class="dashboard-section dashboard-section--signals" data-section="x">
@@ -287,9 +296,9 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
         <aside class="method-note">
             <div>
                 <p class="overline">Current pipeline</p>
-                <h2>Safe intake now. Importance ranking next. Qwen later.</h2>
+                <h2>Safe intake. Explainable ranking. Qwen later.</h2>
             </div>
-            <p>Stage 3 stores feed metadata, short feed excerpts, timestamps, source trust, and canonical links—never full article bodies. Stage 4 adds deterministic relevance, importance, duplicate, and corroboration rules. In Stage 5, Qwen3.5 4B will read only the survivors plus the relevant Markdown profile and produce the visible AI “Why it was chosen” explanation.</p>
+            <p>Stage 4 reads stored titles and short feed excerpts, scores importance, relevance, evidence, practical impact, and novelty, then shows one representative per story cluster. Every candidate and score stays in SQLite. In Stage 5, Qwen3.5 4B will read only these survivors plus the relevant Markdown profile to refine summaries and explanations.</p>
         </aside>
     </main>
 
@@ -297,7 +306,7 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
 
     <footer class="footer">
         <span>Personal Briefing · Local-first MVP</span>
-        <a href="/source-status.php">Check source health →</a>
+        <a href="/methodology.php">Inspect the ranking method →</a>
     </footer>
 </body>
 </html>

@@ -28,6 +28,15 @@ function render_story(array $story, string $variant = ''): void
         </div>
         <h3><?= e($story['headline']) ?></h3>
         <p><?= e($story['summary']) ?></p>
+        <?php if (!empty($story['score_breakdown'])): ?>
+            <div class="score-strip" aria-label="Deterministic ranking score breakdown">
+                <span class="score-strip__total">Rank <?= e(number_format((float) $story['rank_score'], 1)) ?></span>
+                <?php foreach ($story['score_breakdown'] as $label => $score): ?>
+                    <span><small><?= e($label) ?></small> <?= e($score) ?></span>
+                <?php endforeach; ?>
+            </div>
+            <p class="corroboration"><strong>Corroboration:</strong> <?= e($story['corroboration']) ?></p>
+        <?php endif; ?>
         <p class="why"><strong><?= e($story['why_label'] ?? 'Why it was chosen') ?>:</strong> <?= e($story['why']) ?></p>
         <?php if (!empty($story['business_angle'])): ?>
             <p class="business-angle"><strong>Business angle:</strong> <?= e($story['business_angle']) ?></p>

@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS article_evaluations (
     why_selected TEXT,
     business_angle TEXT,
     llm_model TEXT,
+    ranking_version TEXT NOT NULL DEFAULT 'unversioned',
     evaluated_at TEXT NOT NULL,
     UNIQUE (article_id, batch_id, section)
 );
@@ -171,6 +172,21 @@ CREATE TABLE IF NOT EXISTS llm_runs (
     completed_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ranking_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id TEXT NOT NULL REFERENCES refresh_batches(id) ON DELETE CASCADE,
+    section TEXT NOT NULL,
+    ranking_version TEXT NOT NULL,
+    candidate_count INTEGER NOT NULL DEFAULT 0,
+    cluster_count INTEGER NOT NULL DEFAULT 0,
+    selected_count INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('success', 'failed')),
+    error_message TEXT,
+    completed_at TEXT NOT NULL,
+    UNIQUE (batch_id, section, ranking_version)
+);
+
 CREATE INDEX IF NOT EXISTS idx_refresh_batches_section_started
 ON refresh_batches(section, started_at DESC);
 
@@ -189,6 +205,12 @@ ON article_sections(section, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_evaluations_batch_section_selected
 ON article_evaluations(batch_id, section, selected);
 
+CREATE INDEX IF NOT EXISTS idx_story_clusters_batch_section
+ON story_clusters(batch_id, section);
+
+CREATE INDEX IF NOT EXISTS idx_cluster_articles_article
+ON cluster_articles(article_id);
+
 CREATE INDEX IF NOT EXISTS idx_market_quotes_instrument_retrieved
 ON market_quotes(instrument_key, retrieved_at DESC);
 
@@ -204,6 +226,9 @@ ON interaction_events(section, event_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_runs_section_completed
 ON llm_runs(section, completed_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_ranking_runs_section_completed
+ON ranking_runs(section, completed_at DESC);
+
 PRAGMA optimize;
 
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;

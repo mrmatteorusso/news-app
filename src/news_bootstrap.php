@@ -8,6 +8,10 @@ require_once __DIR__ . '/News/FeedParser.php';
 require_once __DIR__ . '/News/NewsRepository.php';
 require_once __DIR__ . '/News/NewsRefreshService.php';
 require_once __DIR__ . '/News/NewsPresenter.php';
+require_once __DIR__ . '/Ranking/DeterministicRanker.php';
+require_once __DIR__ . '/Ranking/StoryClusterer.php';
+require_once __DIR__ . '/Ranking/RankingRepository.php';
+require_once __DIR__ . '/Ranking/RankingService.php';
 
 function news_config(): array
 {
@@ -21,6 +25,12 @@ function configured_sources(): array
     return $sources ??= require '/var/www/config/sources.php';
 }
 
+function ranking_config(): array
+{
+    static $config;
+    return $config ??= require '/var/www/config/ranking.php';
+}
+
 function news_repository(): NewsRepository
 {
     static $repository;
@@ -29,6 +39,25 @@ function news_repository(): NewsRepository
         $repository->seedSources(configured_sources());
     }
     return $repository;
+}
+
+function ranking_repository(): RankingRepository
+{
+    static $repository;
+    return $repository ??= new RankingRepository(Database::connection());
+}
+
+function ranking_service(): RankingService
+{
+    static $service;
+    $config = ranking_config();
+    return $service ??= new RankingService(
+        ranking_repository(),
+        new DeterministicRanker($config),
+        new StoryClusterer(),
+        $config,
+        news_config(),
+    );
 }
 
 function news_refresh_service(): NewsRefreshService
@@ -41,6 +70,7 @@ function news_refresh_service(): NewsRefreshService
         new HttpClient(),
         configured_sources(),
         $config,
+        ranking_service(),
     );
 }
 

@@ -62,12 +62,15 @@ try {
 
     $snapshot = NewsPresenter::presentSnapshot($refresh['snapshot']);
     $failed = ($refresh['result']['status'] ?? null) === 'failed';
+    $rankingFailed = ($refresh['ranking']['reason'] ?? null) === 'ranking_failed';
     news_respond([
         'ok' => !$failed,
         'section' => $section,
         'skipped_cache' => $refresh['skipped_cache'],
         'batch_id' => $refresh['batch_id'] ?? $snapshot['batch_id'],
         'result' => $refresh['result'],
+        'ranking' => $refresh['ranking'],
+        'warning' => $rankingFailed ? 'New intake was stored, but ranking failed. The previous ranked briefing remains visible.' : null,
         'snapshot' => $snapshot,
         'error' => $failed ? 'Every configured feed failed. Previous stories were retained.' : null,
     ], $failed ? 503 : 200);

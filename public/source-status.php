@@ -162,6 +162,7 @@ $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
         <nav class="topnav" aria-label="Primary navigation">
             <a class="topnav__link" href="/">Dashboard</a>
             <a class="topnav__link topnav__link--active" href="/source-status.php">Source status</a>
+            <a class="topnav__link" href="/methodology.php">Ranking method</a>
             <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">◐ <span>Theme</span></button>
         </nav>
     </header>
@@ -177,8 +178,8 @@ $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 3 · Live source health</strong>
-            <span>Market providers and free news feeds are live. “Planned” rows need source-specific adapters and do not populate SQLite yet.</span>
+            <strong>Stage 4 · Live source and ranking health</strong>
+            <span>Market providers and free news feeds are live; successful news batches are ranked and clustered in SQLite. “Planned” rows need source-specific adapters and do not populate SQLite yet.</span>
         </div>
 
         <section class="status-summary" aria-label="Source summary">

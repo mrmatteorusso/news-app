@@ -34,6 +34,7 @@ final class Database
         }
         $pdo->exec($schema);
         self::ensureStageTwoColumns($pdo);
+        self::ensureStageFourColumns($pdo);
 
         self::$connection = $pdo;
         return $pdo;
@@ -47,5 +48,13 @@ final class Database
             $pdo->exec("ALTER TABLE source_fetches ADD COLUMN request_kind TEXT NOT NULL DEFAULT 'scan'");
         }
     }
-}
 
+    private static function ensureStageFourColumns(PDO $pdo): void
+    {
+        $columns = $pdo->query('PRAGMA table_info(article_evaluations)')->fetchAll();
+        $columnNames = array_column($columns, 'name');
+        if (!in_array('ranking_version', $columnNames, true)) {
+            $pdo->exec("ALTER TABLE article_evaluations ADD COLUMN ranking_version TEXT NOT NULL DEFAULT 'unversioned'");
+        }
+    }
+}

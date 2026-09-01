@@ -216,20 +216,67 @@ final class NewsRepository
 
     public function latestSnapshot(string $displaySection, string $stateKey, int $cacheMinutes, int $limit): array
     {
-        $statement = $this->pdo->prepare(
-            'SELECT a.*, s.name AS source_name, s.source_type, s.trust_level, s.geography
-             FROM article_sections ars
-             INNER JOIN articles a ON a.id = ars.article_id
-             INNER JOIN sources s ON s.id = a.source_id
-             WHERE ars.section = :section AND (a.expires_at IS NULL OR a.expires_at >= :now)
-             ORDER BY COALESCE(a.source_updated_at, a.published_at, a.first_retrieved_at) DESC, a.id DESC
-             LIMIT :limit'
+        $rankingStatement = $this->pdo->prepare(
+            "SELECT rr.*
+             FROM ranking_runs rr
+             INNER JOIN refresh_batches rb ON rb.id = rr.batch_id
+             WHERE rr.section = :display_section AND rb.section = :state_key AND rr.status = 'success'
+             ORDER BY rr.completed_at DESC, rr.id DESC
+             LIMIT 1"
         );
-        $statement->bindValue(':section', $displaySection);
-        $statement->bindValue(':now', gmdate('Y-m-d H:i:s'));
-        $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $statement->execute();
-        $articles = $statement->fetchAll();
+        $rankingStatement->execute([':display_section' => $displaySection, ':state_key' => $stateKey]);
+        $rankingRun = $rankingStatement->fetch() ?: null;
+
+        if ($rankingRun !== null) {
+            $statement = $this->pdo->prepare(
+                'SELECT a.*, s.name AS source_name, s.source_type, s.trust_level, s.geography,
+                        ae.deterministic_score, ae.importance_score, ae.relevance_score,
+                        ae.evidence_confidence, ae.practical_impact_score, ae.novelty_score,
+                        ae.why_selected, ae.ranking_version, sc.id AS cluster_id,
+                        COUNT(DISTINCT ca.article_id) AS cluster_article_count,
+                        COUNT(DISTINCT related.source_id) AS cluster_source_count,
+                        COUNT(DISTINCT CASE
+                            WHEN related_source.trust_level >= 3
+                             AND related_source.source_type NOT IN (\'signal\', \'contrarian\')
+                            THEN related.source_id END) AS cluster_evidence_source_count,
+                        GROUP_CONCAT(DISTINCT related_source.name) AS related_sources
+                 FROM story_clusters sc
+                 INNER JOIN articles a ON a.id = sc.representative_article_id
+                 INNER JOIN sources s ON s.id = a.source_id
+                 INNER JOIN article_evaluations ae
+                    ON ae.article_id = a.id AND ae.batch_id = sc.batch_id AND ae.section = sc.section
+                 LEFT JOIN cluster_articles ca ON ca.cluster_id = sc.id
+                 LEFT JOIN articles related ON related.id = ca.article_id
+                 LEFT JOIN sources related_source ON related_source.id = related.source_id
+                 WHERE sc.batch_id = :batch_id AND sc.section = :section AND ae.selected = 1
+                   AND (a.expires_at IS NULL OR a.expires_at >= :now)
+                 GROUP BY sc.id, a.id, ae.id
+                 ORDER BY ae.deterministic_score DESC,
+                          COALESCE(a.source_updated_at, a.published_at, a.first_retrieved_at) DESC
+                 LIMIT :limit'
+            );
+            $statement->bindValue(':batch_id', $rankingRun['batch_id']);
+            $statement->bindValue(':section', $displaySection);
+            $statement->bindValue(':now', gmdate('Y-m-d H:i:s'));
+            $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $statement->execute();
+            $articles = $statement->fetchAll();
+        } else {
+            $statement = $this->pdo->prepare(
+                'SELECT a.*, s.name AS source_name, s.source_type, s.trust_level, s.geography
+                 FROM article_sections ars
+                 INNER JOIN articles a ON a.id = ars.article_id
+                 INNER JOIN sources s ON s.id = a.source_id
+                 WHERE ars.section = :section AND (a.expires_at IS NULL OR a.expires_at >= :now)
+                 ORDER BY COALESCE(a.source_updated_at, a.published_at, a.first_retrieved_at) DESC, a.id DESC
+                 LIMIT :limit'
+            );
+            $statement->bindValue(':section', $displaySection);
+            $statement->bindValue(':now', gmdate('Y-m-d H:i:s'));
+            $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $statement->execute();
+            $articles = $statement->fetchAll();
+        }
 
         $stateStatement = $this->pdo->prepare('SELECT * FROM section_state WHERE section = :section');
         $stateStatement->execute([':section' => $stateKey]);
@@ -256,6 +303,8 @@ final class NewsRepository
             'has_data' => $articles !== [],
             'archive_count' => (int) $archiveStatement->fetchColumn(),
             'latest_attempt' => $latestBatch->fetch() ?: null,
+            'ranking_ready' => $rankingRun !== null,
+            'ranking_run' => $rankingRun,
         ];
     }
 

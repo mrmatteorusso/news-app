@@ -471,6 +471,39 @@ a:focus-visible {
     color: var(--ink);
 }
 
+.score-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 1px 0 7px;
+    font: 700 0.58rem ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.score-strip span {
+    padding: 3px 5px;
+    border: 1px solid var(--soft-line);
+    border-radius: 3px;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--surface) 76%, var(--mint));
+}
+
+.score-strip small {
+    font: inherit;
+    font-weight: 500;
+}
+
+.score-strip .score-strip__total {
+    color: var(--forest-dark);
+    border-color: color-mix(in srgb, var(--forest) 42%, var(--soft-line));
+    background: var(--mint);
+}
+
+.story-card .corroboration {
+    margin-bottom: 6px;
+    color: var(--muted);
+    font: 650 0.62rem ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
 .story-card .business-angle {
     border-left-color: var(--purple);
 }
@@ -1410,6 +1443,10 @@ a:focus-visible {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 6px;
     margin-bottom: 13px;
+}
+
+.analytics-cards.methodology-cards {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .analytics-cards article {

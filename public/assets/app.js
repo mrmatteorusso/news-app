@@ -146,6 +146,29 @@
         heading.textContent = story.headline || 'Untitled feed item';
         const summary = document.createElement('p');
         summary.textContent = story.summary || '';
+        let scoreStrip = null;
+        let corroboration = null;
+        if (story.score_breakdown && Object.keys(story.score_breakdown).length > 0) {
+            scoreStrip = document.createElement('div');
+            scoreStrip.className = 'score-strip';
+            scoreStrip.setAttribute('aria-label', 'Deterministic ranking score breakdown');
+            const total = document.createElement('span');
+            total.className = 'score-strip__total';
+            total.textContent = `Rank ${Number(story.rank_score || 0).toFixed(1)}`;
+            scoreStrip.append(total);
+            Object.entries(story.score_breakdown).forEach(([label, score]) => {
+                const item = document.createElement('span');
+                const name = document.createElement('small');
+                name.textContent = label;
+                item.append(name, document.createTextNode(` ${score}`));
+                scoreStrip.append(item);
+            });
+            corroboration = document.createElement('p');
+            corroboration.className = 'corroboration';
+            const corroborationLabel = document.createElement('strong');
+            corroborationLabel.textContent = 'Corroboration: ';
+            corroboration.append(corroborationLabel, document.createTextNode(story.corroboration || 'Single-source cluster'));
+        }
         const why = document.createElement('p');
         why.className = 'why';
         const whyLabel = document.createElement('strong');
@@ -177,7 +200,10 @@
         arrow.textContent = '→';
         link.append(arrow);
 
-        article.append(meta, heading, summary, why, details, link);
+        article.append(meta, heading, summary);
+        if (scoreStrip) article.append(scoreStrip);
+        if (corroboration) article.append(corroboration);
+        article.append(why, details, link);
         return article;
     };
 
@@ -195,13 +221,15 @@
         if (updated) updated.textContent = snapshot.last_success_display || 'Not yet';
         if (batch && snapshot.batch_id) batch.textContent = snapshot.batch_id;
 
-        const countLabel = `${snapshot.archive_count || 0} stored · ${(snapshot.stories || []).length} shown`;
+        const countLabel = snapshot.ranking_ready
+            ? `${snapshot.selected_count || 0} selected / ${snapshot.candidate_count || 0} evaluated · ${snapshot.cluster_count || 0} clusters · ${snapshot.archive_count || 0} archived`
+            : `${snapshot.archive_count || 0} stored · ${(snapshot.stories || []).length} shown`;
         if (snapshot.status === 'ready') {
-            setSectionStatus(section, snapshot.stale ? 'partial' : 'ready', snapshot.stale ? `Live intake cached · background check due · ${countLabel}` : `Live intake ready · ${countLabel}`);
+            setSectionStatus(section, snapshot.stale ? 'partial' : 'ready', snapshot.stale ? `Ranked cache ready · background check due · ${countLabel}` : `Ranked briefing ready · ${countLabel}`);
         } else if (snapshot.status === 'partial') {
-            setSectionStatus(section, 'partial', `Live intake ready · some feeds unavailable · ${countLabel}`);
+            setSectionStatus(section, 'partial', `Ranked briefing ready · some feeds unavailable · ${countLabel}`);
         } else if (snapshot.status === 'failed') {
-            setSectionStatus(section, 'error', snapshot.has_data ? `Feed check failed · previous intake retained · ${countLabel}` : 'Feed check unavailable');
+            setSectionStatus(section, 'error', (snapshot.archive_count || 0) > 0 ? `Feed check failed · previous ranked briefing retained · ${countLabel}` : 'Feed check unavailable');
         } else {
             setSectionStatus(section, 'working', 'Waiting for first feed check');
         }
@@ -255,8 +283,10 @@
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Feed refresh failed.');
             if (recordEvent) recordActivity('section_refresh', label);
             if (!quiet) {
-                const count = payload.snapshot?.stories?.length || 0;
-                showToast(payload.skipped_cache ? `${label} intake is already current.` : `${label} checked; ${count} recent candidates are visible.`);
+                const count = payload.snapshot?.selected_count || 0;
+                showToast(payload.warning || (payload.skipped_cache
+                    ? `${label} ranked cache is already current.`
+                    : `${label} checked; ${count} distinct stories selected.`));
             }
             return true;
         } catch (error) {
@@ -418,7 +448,7 @@
                 const sectionName = liveNewsSections[index];
                 const section = document.querySelector(`[data-section="${sectionName}"]`);
                 if (payload.ok && payload.snapshot) applyNewsSnapshot(payload.snapshot, section);
-                if (!payload.ok || payload.snapshot?.stale || !payload.snapshot?.has_data) {
+                if (!payload.ok || payload.snapshot?.stale || !(payload.snapshot?.archive_count > 0)) {
                     checksNeeded += 1;
                     jobs.push(refreshNewsSection(section, true, 'page_open'));
                 }
