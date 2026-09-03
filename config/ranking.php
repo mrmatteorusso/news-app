@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 return [
-    'version' => 'deterministic-v3-fixed-representative',
+    'version' => 'deterministic-v4-freshness',
     'candidate_limit' => 250,
     'weights' => [
         'importance' => 0.32,
@@ -123,6 +123,44 @@ return [
                 'price cut' => 12, 'free tier' => 9, 'security incident' => 17,
                 'data breach' => 18, 'export controls' => 16, 'regulatory framework' => 14,
                 'production deployment' => 14, 'measured productivity' => 15,
+            ],
+        ],
+        'italy' => [
+            'selection_threshold' => 32,
+            'minimum_importance' => 14,
+            'minimum_relevance' => 30,
+            'cluster_hours' => 168,
+            'relevance_terms' => [
+                'governo' => 10, 'consiglio dei ministri' => 14, 'decreto' => 11,
+                'legge' => 10, 'approvato' => 9, 'entra in vigore' => 13,
+                'fisco' => 12, 'tasse' => 12, 'scadenza' => 13, 'pensione' => 11,
+                'sanità' => 11, 'salute' => 9, 'energia' => 9, 'lavoro' => 9,
+                'imprese' => 8, 'famiglie' => 9, 'bonus' => 9, 'emergenza' => 13,
+            ],
+            'importance_terms' => [
+                'decreto legge' => 15, 'stato di emergenza' => 20, 'riforma' => 12,
+                'manovra' => 15, 'legge di bilancio' => 17, 'obbligo' => 13,
+                'divieto' => 12, 'proroga' => 10, 'protezione civile' => 14,
+            ],
+        ],
+        'local' => [
+            'selection_threshold' => 28,
+            'minimum_importance' => 10,
+            'minimum_relevance' => 28,
+            'cluster_hours' => 168,
+            'relevance_terms' => [
+                'bormio' => 15, 'livigno' => 15, 'sondalo' => 15,
+                'valdidentro' => 15, 'valdisotto' => 15, 'valfurva' => 15,
+                'alta valtellina' => 16, 'sondrio' => 10, 'lombardia' => 8,
+                'viabilità' => 14, 'strada' => 10, 'trasporto' => 11,
+                'chiusura' => 13, 'interruzione' => 13, 'allerta' => 15,
+                'sanità' => 11, 'scuola' => 9, 'servizio' => 8,
+            ],
+            'importance_terms' => [
+                'protezione civile' => 18, 'emergenza' => 18, 'allerta rossa' => 22,
+                'chiusura strada' => 17, 'strada chiusa' => 17, 'frana' => 18,
+                'valanga' => 18, 'alluvione' => 18, 'interruzione servizio' => 15,
+                'ordinanza' => 12, 'scadenza' => 11, 'deviazione' => 12,
             ],
         ],
     ],

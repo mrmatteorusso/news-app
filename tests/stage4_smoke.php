@@ -56,12 +56,20 @@ $items = [
         'title' => 'Celebrity rumour could become the next viral story',
         'excerpt' => 'An unsupported community prediction without primary evidence.',
     ],
+    [
+        'canonical_url' => 'https://wire.example.test/old-government-report',
+        'source_id' => 'wire',
+        'title' => 'Prime minister resigns in an older government collapse report',
+        'excerpt' => 'A previously important report is retained in the archive after its Breaking display window.',
+        'published_at' => gmdate('Y-m-d H:i:s', time() - (72 * 3600)),
+        'source_updated_at' => gmdate('Y-m-d H:i:s', time() - (72 * 3600)),
+    ],
 ];
 $items = array_map(static fn (array $item): array => [
     ...$item,
     'author' => null,
-    'published_at' => $now,
-    'source_updated_at' => $now,
+    'published_at' => $item['published_at'] ?? $now,
+    'source_updated_at' => $item['source_updated_at'] ?? $now,
     'content_hash' => hash('sha256', $item['title']),
 ], $items);
 $calls = array_map(static fn (array $source): array => [
@@ -101,7 +109,8 @@ stage4Ensure($snapshot['ranking_ready'] === true, 'The latest successful ranking
 stage4Ensure(count($snapshot['articles']) === 1, 'The snapshot should show one selected cluster representative.');
 stage4Ensure((int) $snapshot['articles'][0]['cluster_source_count'] === 2, 'Corroboration must count distinct publishers.');
 stage4Ensure((int) $snapshot['articles'][0]['cluster_evidence_source_count'] === 2, 'Evidence corroboration must count distinct reputable publishers.');
-stage4Ensure((int) $snapshot['archive_count'] === 3, 'Clustering must not delete the underlying archive.');
+stage4Ensure((int) $snapshot['archive_count'] === 4, 'Clustering and freshness filtering must not delete the underlying archive.');
+stage4Ensure((int) $pdo->query("SELECT COUNT(*) FROM articles WHERE canonical_url = 'https://wire.example.test/old-government-report'")->fetchColumn() === 1, 'An old hidden story should remain stored in SQLite.');
 stage4Ensure((int) $snapshot['articles'][0]['importance_score'] > 0, 'The score breakdown was not exposed.');
 
 $rankingRepository->recordFailure('TEST-RANK', 'breaking', 'synthetic-failed-version', 4, 'Synthetic ranking failure');

@@ -21,5 +21,7 @@ return [
         'finance' => 'FINANCE.md',
         'crypto' => 'CRYPTO.md',
         'ai' => 'AI_BUSINESS.md',
+        'italy' => 'ITALY.md',
+        'local' => 'LOCAL.md',
     ],
 ];

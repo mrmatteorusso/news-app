@@ -134,13 +134,6 @@
         tag.className = 'story-card__tag';
         tag.textContent = story.tag || 'LIVE INTAKE';
         meta.append(tag);
-        if (story.confidence) {
-            const confidence = document.createElement('span');
-            confidence.className = 'confidence';
-            confidence.textContent = `Evidence: ${story.confidence}`;
-            confidence.title = story.confidence_title || 'Source-level trust only; article-level confidence arrives in Stage 4.';
-            meta.append(confidence);
-        }
 
         let topicTags = null;
         if (Array.isArray(story.topic_tags) && story.topic_tags.length > 0) {
@@ -158,46 +151,31 @@
         heading.textContent = story.headline || 'Untitled feed item';
         const summary = document.createElement('p');
         summary.textContent = story.summary || '';
-        let scoreStrip = null;
         let corroboration = null;
         let relatedLinks = null;
         let intelligenceMeta = null;
-        if (story.score_breakdown && Object.keys(story.score_breakdown).length > 0) {
-            scoreStrip = document.createElement('div');
-            scoreStrip.className = 'score-strip';
-            scoreStrip.setAttribute('aria-label', 'Deterministic ranking score breakdown');
-            const total = document.createElement('span');
-            total.className = 'score-strip__total';
-            total.textContent = `Rank ${Number(story.rank_score || 0).toFixed(1)}`;
-            scoreStrip.append(total);
-            Object.entries(story.score_breakdown).forEach(([label, score]) => {
-                const item = document.createElement('span');
-                const name = document.createElement('small');
-                name.textContent = label;
-                item.append(name, document.createTextNode(` ${score}`));
-                scoreStrip.append(item);
-            });
+        if (story.corroboration) {
             corroboration = document.createElement('p');
             corroboration.className = 'corroboration';
             const corroborationLabel = document.createElement('strong');
             corroborationLabel.textContent = 'Corroboration: ';
             corroboration.append(corroborationLabel, document.createTextNode(story.corroboration || 'Single-source cluster'));
-            if (Array.isArray(story.related_links) && story.related_links.length > 0) {
-                relatedLinks = document.createElement('p');
-                relatedLinks.className = 'related-links';
-                const relatedLabel = document.createElement('strong');
-                relatedLabel.textContent = 'Related reports: ';
-                relatedLinks.append(relatedLabel);
-                story.related_links.forEach((related) => {
-                    const relatedLink = document.createElement('a');
-                    relatedLink.href = related.url;
-                    relatedLink.target = '_blank';
-                    relatedLink.rel = 'noreferrer noopener';
-                    relatedLink.dataset.trackLink = '';
-                    relatedLink.textContent = related.name;
-                    relatedLinks.append(relatedLink);
-                });
-            }
+        }
+        if (Array.isArray(story.related_links) && story.related_links.length > 0) {
+            relatedLinks = document.createElement('p');
+            relatedLinks.className = 'related-links';
+            const relatedLabel = document.createElement('strong');
+            relatedLabel.textContent = 'Related reports: ';
+            relatedLinks.append(relatedLabel);
+            story.related_links.forEach((related) => {
+                const relatedLink = document.createElement('a');
+                relatedLink.href = related.url;
+                relatedLink.target = '_blank';
+                relatedLink.rel = 'noreferrer noopener';
+                relatedLink.dataset.trackLink = '';
+                relatedLink.textContent = related.name;
+                relatedLinks.append(relatedLink);
+            });
         }
         if (story.llm_model) {
             intelligenceMeta = document.createElement('p');
@@ -206,23 +184,6 @@
             fit.textContent = 'Gemma selected';
             intelligenceMeta.append(fit, document.createTextNode(` · ${story.llm_reason_label || 'profile selection'} · ${story.llm_model}`));
         }
-        const why = document.createElement('p');
-        why.className = 'why';
-        const whyLabel = document.createElement('strong');
-        whyLabel.textContent = `${story.why_label || 'Why it appears'}: `;
-        why.append(whyLabel, document.createTextNode(story.why || 'Recent feed candidate.'));
-
-        let decisionTrace = null;
-        if (story.llm_model && story.deterministic_explanation) {
-            decisionTrace = document.createElement('details');
-            decisionTrace.className = 'decision-trace';
-            const traceSummary = document.createElement('summary');
-            traceSummary.textContent = 'Compare deterministic basis';
-            const traceText = document.createElement('p');
-            traceText.textContent = story.deterministic_explanation;
-            decisionTrace.append(traceSummary, traceText);
-        }
-
         const details = document.createElement('div');
         details.className = 'story-card__details';
         [
@@ -270,12 +231,9 @@
         article.append(meta);
         if (topicTags) article.append(topicTags);
         article.append(heading, summary);
-        if (scoreStrip) article.append(scoreStrip);
         if (corroboration) article.append(corroboration);
         if (relatedLinks) article.append(relatedLinks);
         if (intelligenceMeta) article.append(intelligenceMeta);
-        article.append(why);
-        if (decisionTrace) article.append(decisionTrace);
         article.append(details, link);
         if (feedback) article.append(feedback);
         return article;
@@ -432,7 +390,7 @@
             return marketsOk || newsOk;
         }
 
-        if (['breaking', 'crypto', 'ai'].includes(section.dataset.section)) {
+        if (['breaking', 'crypto', 'ai', 'italy', 'local'].includes(section.dataset.section)) {
             const refreshed = await refreshNewsSection(section, true, trigger);
             if (!refreshed) return false;
             const aiReview = await enrichNewsSection(section, quiet, trigger);
@@ -480,7 +438,7 @@
         refreshAll.addEventListener('click', async () => {
             refreshAll.disabled = true;
             refreshAll.innerHTML = '<span aria-hidden="true">↻</span> Preparing all sections…';
-            const liveNames = ['breaking', 'finance', 'crypto', 'ai'];
+            const liveNames = ['breaking', 'finance', 'crypto', 'ai', 'italy', 'local'];
             const liveSections = liveNames.map((name) => document.querySelector(`[data-section="${name}"]`));
             const financeSection = liveSections[1];
             const mockSections = [...document.querySelectorAll('[data-section]')]
@@ -500,7 +458,7 @@
             refreshAll.disabled = false;
             refreshAll.innerHTML = '<span aria-hidden="true">↻</span> Refresh all';
             const feedsReady = newsResults.filter(Boolean).length;
-            showToast(`${feedsReady}/4 news groups checked · ${aiReady}/4 Gemma reviews ready · markets ${marketOk ? 'ready' : 'partial'}.`);
+            showToast(`${feedsReady}/${liveNames.length} news groups checked · ${aiReady}/${liveNames.length} Gemma reviews ready · markets ${marketOk ? 'ready' : 'partial'}.`);
         });
     }
 
@@ -597,7 +555,7 @@
     const backgroundState = document.querySelector('#background-state');
     if (backgroundState) {
         const financeSection = document.querySelector('[data-section="finance"]');
-        const liveNewsSections = ['breaking', 'finance', 'crypto', 'ai'];
+        const liveNewsSections = ['breaking', 'finance', 'crypto', 'ai', 'italy', 'local'];
         void Promise.all([
             fetch('/api/finance.php?action=status').then((response) => response.json()),
             ...liveNewsSections.map((section) => fetch(`/api/news.php?action=status&section=${section}`).then((response) => response.json())),
@@ -625,7 +583,7 @@
                 await Promise.all(jobs);
             }
 
-            backgroundState.textContent = 'Gemma review queue: checking four sections sequentially…';
+            backgroundState.textContent = `Gemma review queue: checking ${liveNewsSections.length} sections sequentially…`;
             let aiReady = 0;
             for (const sectionName of liveNewsSections) {
                 const section = document.querySelector(`[data-section="${sectionName}"]`);
@@ -638,7 +596,7 @@
             }
             backgroundState.textContent = aiReady === liveNewsSections.length
                 ? 'Live caches and all Gemma reviews ready'
-                : `Live caches ready · ${aiReady}/4 Gemma reviews ready · deterministic fallback active`;
+                : `Live caches ready · ${aiReady}/${liveNewsSections.length} Gemma reviews ready · deterministic fallback active`;
         }).catch(() => {
             backgroundState.textContent = 'Background checks unavailable';
         });
@@ -652,7 +610,7 @@
             try {
                 const requests = [
                     ['finance', '/api/finance.php?action=refresh'],
-                    ...['breaking', 'finance', 'crypto', 'ai'].map((section) => [section, `/api/news.php?action=refresh&section=${section}`]),
+                    ...['breaking', 'finance', 'crypto', 'ai', 'italy', 'local'].map((section) => [section, `/api/news.php?action=refresh&section=${section}`]),
                 ];
                 const results = await Promise.all(requests.map(async ([section, url]) => {
                     const response = await fetch(url, {

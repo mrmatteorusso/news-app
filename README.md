@@ -40,7 +40,7 @@ LM Studio remains a separate Windows application. From inside Docker, PHP reache
 ## Stage 2 finance behaviour
 
 - Opening the dashboard reads SQLite immediately. If the successful finance cache is older than 60 minutes, the browser starts one background refresh.
-- Pressing **Refresh** in Finance forces a new provider batch. **Refresh all** also forces Finance while the news sections still run their clearly labelled demonstration refreshes.
+- Pressing **Refresh** forces a new provider/feed batch for Finance, Critical, Crypto, AI, Italy, or My Area. **Refresh all** checks all six live news groups plus markets; X remains a clearly labelled, non-verifying discovery panel.
 - The initial Yahoo refresh downloads daily history to calculate the highest previous close. That history check is cached for seven days; normal refreshes request only recent daily values.
 - Each card shows the provider's update time separately from the time this app retrieved it.
 - A failed or partial batch never deletes the previous successful values. The section and Source Status page show the problem.
@@ -63,7 +63,8 @@ The complete, reviewed source register is in [docs/SOURCES.md](docs/SOURCES.md),
 
 ## Stage 4 ranking behaviour
 
-- Every successful feed batch triggers the versioned `deterministic-v3-fixed-representative` evaluator. An existing fresh batch is ranked automatically the next time the app reads it.
+- Every successful feed batch triggers the versioned `deterministic-v4-freshness` evaluator. An existing fresh batch is ranked automatically the next time the app reads it.
+- Visible-news windows are deliberately shorter than the 90-day SQLite archive: 48 hours for Breaking, 7 days for Finance and Crypto, and 14 days for AI/business. A new related report can refresh an ongoing event cluster without deleting its older source links.
 - The total score combines importance (32%), relevance (28%), evidence (18%), practical impact (12%), and novelty (10%). Category-specific total, importance, and relevance gates prevent a high source score alone from selecting a minor item.
 - Similar titles inside a category time window form one event cluster. One representative appears with links to related publishers; every article remains in the 90-day archive.
 - PHP assigns a small controlled set of topic/entity tags. Categories remain the visible navigation and analytics groups; a single stored article may belong to more than one category.
@@ -102,4 +103,4 @@ Runtime databases, `.env` files, logs, and `profiles/private/` are excluded from
 3. RSS/public-feed ingestion — complete
 4. Deterministic ranking, corroboration, and story clustering — complete
 5. Minimal Gemma final selection, reason-code telemetry, and feedback — complete
-6. Lombardy, Sondrio, and Alta Valtellina local intelligence
+6. Italy and Alta Valtellina local intelligence from official RSS feeds — complete

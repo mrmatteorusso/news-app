@@ -139,7 +139,7 @@ $localAiTotal = $average($localAiValues('local_ai_total_ms'));
 $localAi7d = $average($localAiValues('local_ai_7d_ms'));
 $lastLiveCheck = $lastLiveSuccesses === [] ? null : max($lastLiveSuccesses);
 $localAiSectionStatuses = [];
-foreach (['breaking' => 'Critical', 'finance' => 'Finance', 'crypto' => 'Crypto', 'ai' => 'AI / Tech'] as $key => $label) {
+foreach (['breaking' => 'Critical', 'finance' => 'Finance', 'crypto' => 'Crypto', 'ai' => 'AI / Tech', 'italy' => 'Italy', 'local' => 'My Area'] as $key => $label) {
     $localAiSectionStatuses[$key] = ['label' => $label, ...llm_enrichment_service()->status($key)];
 }
 ?>

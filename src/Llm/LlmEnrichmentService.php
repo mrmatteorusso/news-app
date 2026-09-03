@@ -230,6 +230,8 @@ final class LlmEnrichmentService
             'finance' => 'Keep only materially decision-relevant monetary, fiscal, regulatory, economic, market-structure, or major-company developments. Reject routine price commentary and ordinary daily market movement.',
             'crypto' => 'Keep only material Bitcoin, Ethereum, Cardano, security, protocol, institutional, market-structure, or regulatory developments. Reject price predictions, promotional claims, and routine volatility.',
             'ai' => 'Keep only meaningful capability, open-model, deployment, security, regulation, infrastructure, or measured business-adoption developments. Reject repetitive announcements, benchmark-only promotion, and minor product changes.',
+            'italy' => 'Keep only confirmed Italian decisions, rules, deadlines, emergencies, services, or economic changes with practical consequences. Reject speeches, ceremonial activity, political messaging, and routine institutional publicity.',
+            'local' => 'Keep actionable Alta Valtellina notices involving safety, roads, transport, healthcare, schools, deadlines, utilities, public services, or meaningful local obligations. Reject events, tourism promotion, ceremonies, and routine municipal publicity.',
             default => 'Apply the category profile strictly and reject marginal candidates.',
         };
 

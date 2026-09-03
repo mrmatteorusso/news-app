@@ -438,12 +438,6 @@ a:focus-visible {
     background: #f2ceca;
 }
 
-.confidence {
-    color: var(--muted);
-    background: #f0f1ed;
-    text-transform: none;
-}
-
 .story-card h3 {
     margin: 14px 0 9px;
     font-family: Georgia, "Times New Roman", serif;
@@ -469,33 +463,6 @@ a:focus-visible {
     padding-left: 11px;
     border-left: 3px solid var(--forest);
     color: var(--ink);
-}
-
-.score-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin: 1px 0 7px;
-    font: 700 0.58rem ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-}
-
-.score-strip span {
-    padding: 3px 5px;
-    border: 1px solid var(--soft-line);
-    border-radius: 3px;
-    color: var(--muted);
-    background: color-mix(in srgb, var(--surface) 76%, var(--mint));
-}
-
-.score-strip small {
-    font: inherit;
-    font-weight: 500;
-}
-
-.score-strip .score-strip__total {
-    color: var(--forest-dark);
-    border-color: color-mix(in srgb, var(--forest) 42%, var(--soft-line));
-    background: var(--mint);
 }
 
 .story-card .corroboration {

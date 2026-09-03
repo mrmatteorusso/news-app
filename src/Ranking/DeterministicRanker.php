@@ -184,10 +184,10 @@ final class DeterministicRanker
             $hours <= 6 => 100,
             $hours <= 24 => 90,
             $hours <= 48 => 78,
-            $hours <= 96 => 66,
-            $hours <= 168 => 55,
-            $hours <= 336 => 42,
-            default => 30,
+            $hours <= 96 => 62,
+            $hours <= 168 => 46,
+            $hours <= 336 => 28,
+            default => 15,
         };
     }
 

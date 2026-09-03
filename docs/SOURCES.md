@@ -68,6 +68,20 @@ No paid news API, X API, commercial market-news feed, paywall bypass, or full-pa
 - Only the title, feed-supplied short excerpt, optional author, canonical link, publication/update/retrieval timestamps, and a content hash are stored. `raw_payload` remains `NULL`.
 - Common tracking parameters are stripped from stored links. Duplicate canonical URLs are updated rather than inserted again.
 - Articles expire after 90 days by default (`ARTICLE_RETENTION_DAYS`), while refresh/source telemetry remains available for the Source Status page.
+
+## Italy and My Area
+
+| Source | Category | Why it is included |
+| --- | --- | --- |
+| [Presidenza del Consiglio dei Ministri](https://www.governo.it/feed/rss) | Italy | Official national feed for confirmed government decisions, measures, and emergency updates. |
+| [Comune di Bormio](https://www.comune.bormio.so.it/it/news/feed) | My Area | Official municipal notices for Bormio. |
+| [Comune di Livigno](https://www.comune.livigno.so.it/it/news/feed) | My Area | Official municipal notices for Livigno. |
+| [Comune di Sondalo](https://www.comune.sondalo.so.it/it/news/feed) | My Area | Official municipal notices for Sondalo. |
+| [Comune di Valdidentro](https://www.comune.valdidentro.so.it/it/news/feed) | My Area | Official municipal notices for Valdidentro. |
+| [Comune di Valdisotto](https://www.comune.valdisotto.so.it/it/news/feed) | My Area | Official municipal notices for Valdisotto. |
+| [Comune di Valfurva](https://www.comune.valfurva.so.it/it/news/feed) | My Area | Official municipal notices for Valfurva. |
+
+These primary feeds are filtered for safety, transport, healthcare, schools, deadlines, utilities, public services, and practical obligations. Ceremonies, tourism promotion, procurement administration, and routine publicity are rejected. Regione Lombardia and Provincia di Sondrio remain visible as planned sources until a stable machine-readable feed is available; fragile page scraping is deliberately excluded from the local MVP.
 - Each category has an independent batch and cache interval. A failed batch records the error and preserves the last successful archive.
 
 The active machine-readable URLs and trust tiers are defined in [`config/sources.php`](../config/sources.php); refresh and retention rules are defined in [`config/news.php`](../config/news.php).

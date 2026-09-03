@@ -48,7 +48,7 @@ $sections['finance'] = array_replace($sections['finance'], [
 ]);
 
 $liveNewsSnapshots = [];
-foreach (['breaking', 'finance', 'crypto', 'ai'] as $newsSection) {
+foreach (['breaking', 'finance', 'crypto', 'ai', 'italy', 'local'] as $newsSection) {
     try {
         $liveNewsSnapshots[$newsSection] = news_snapshot($newsSection);
     } catch (Throwable $exception) {
@@ -105,7 +105,7 @@ $newsStatusLabel = static fn (string $status): string => match ($status) {
     default => 'working',
 };
 
-foreach (['breaking', 'crypto', 'ai'] as $newsSection) {
+foreach (['breaking', 'crypto', 'ai', 'italy', 'local'] as $newsSection) {
     $snapshot = $liveNewsSnapshots[$newsSection];
     $sections[$newsSection] = array_replace($sections[$newsSection], [
         'status' => $newsStatusLabel($snapshot['status']),
@@ -120,6 +120,8 @@ $financeStories = $financeNews['stories'];
 $breakingStories = $liveNewsSnapshots['breaking']['stories'];
 $cryptoStories = $liveNewsSnapshots['crypto']['stories'];
 $aiStories = $liveNewsSnapshots['ai']['stories'];
+$italyStories = $liveNewsSnapshots['italy']['stories'];
+$localStories = $liveNewsSnapshots['local']['stories'];
 $sections['finance']['state'] .= ' · News: ' . $newsStateLabel($financeNews);
 $sections['finance']['status'] = in_array('error', [$sections['finance']['status'], $newsStatusLabel($financeNews['status'])], true)
     ? 'error'
@@ -168,8 +170,8 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
         </section>
 
         <div class="demo-banner" role="note">
-            <strong>Stage 5 · Local Gemma intelligence</strong>
-            <span>Gemma 3 4B makes only the final keep/reject decision for PHP-ranked event clusters. Publisher titles and excerpts are never rewritten; invalid local-model output leaves the previous valid briefing untouched.</span>
+            <strong>Local-first intelligence pipeline</strong>
+            <span>Six live news groups use PHP ranking and event clustering followed by Gemma 3 4B keep/reject review. Publisher titles and excerpts are never rewritten; invalid local-model output leaves the previous valid briefing untouched.</span>
         </div>
 
         <section class="briefing-meta" aria-label="Briefing status">
@@ -270,6 +272,25 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
             <p class="empty-state" data-news-empty<?= $aiStories !== [] ? ' hidden' : '' ?>>No stored AI / technology candidate currently passes the active briefing filters.</p>
         </section>
 
+        <section class="dashboard-section" data-section="italy">
+            <?php render_section_header($sections['italy']); ?>
+            <div class="story-grid" data-news-grid>
+                <?php foreach ($italyStories as $story) { render_story($story); } ?>
+            </div>
+            <p class="empty-state" data-news-empty<?= $italyStories !== [] ? ' hidden' : '' ?>>No recent Italian Government item currently passes the practical-importance filters.</p>
+        </section>
+
+        <section class="dashboard-section" data-section="local">
+            <?php render_section_header($sections['local']); ?>
+            <div class="local-scope" aria-label="Local geographic priorities">
+                <span>Lombardy</span><span>Sondrio</span><span>Alta Valtellina</span><span>Bormio</span><span>Sondalo</span><span>Valdisotto</span><span>Valdidentro</span><span>Valfurva</span><span>Livigno</span>
+            </div>
+            <div class="story-grid" data-news-grid>
+                <?php foreach ($localStories as $story) { render_story($story); } ?>
+            </div>
+            <p class="empty-state" data-news-empty<?= $localStories !== [] ? ' hidden' : '' ?>>No recent Alta Valtellina municipal notice currently passes the practical local filter.</p>
+        </section>
+
         <section class="dashboard-section dashboard-section--signals" data-section="x">
             <?php render_section_header($sections['x']); ?>
             <p class="section-note"><strong>Signal ≠ verified fact.</strong> These five posts are discovery leads. Important claims must be confirmed through a primary or reputable source.</p>
@@ -284,23 +305,6 @@ $sections['finance']['status'] = in_array('error', [$sections['finance']['status
                         <a href="<?= e($signal['url']) ?>" target="_blank" rel="noreferrer noopener" data-track-link>Open account example →</a>
                     </article>
                 <?php endforeach; ?>
-            </div>
-        </section>
-
-        <section class="dashboard-section" data-section="italy">
-            <?php render_section_header($sections['italy']); ?>
-            <div class="story-grid">
-                <?php foreach ($italyStories as $story) { render_story($story); } ?>
-            </div>
-        </section>
-
-        <section class="dashboard-section" data-section="local">
-            <?php render_section_header($sections['local']); ?>
-            <div class="local-scope" aria-label="Local geographic priorities">
-                <span>Lombardy</span><span>Sondrio</span><span>Alta Valtellina</span><span>Bormio</span><span>Sondalo</span><span>Valdisotto</span><span>Valdidentro</span><span>Valfurva</span><span>Livigno</span>
-            </div>
-            <div class="story-grid">
-                <?php foreach ($localStories as $story) { render_story($story); } ?>
             </div>
         </section>
 

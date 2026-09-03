@@ -45,7 +45,6 @@ final class NewsPresenter
 
     private static function presentArticle(array $article): array
     {
-        $trust = (int) $article['trust_level'];
         $type = (string) $article['source_type'];
         $typeLabel = ucwords(str_replace('_', ' ', $type));
         $ranked = array_key_exists('deterministic_score', $article);
@@ -62,30 +61,14 @@ final class NewsPresenter
         return [
             'article_id' => (int) $article['id'],
             'tag' => ($llmCurrent ? 'GEMMA' : ($ranked ? 'RANKED' : 'LIVE INTAKE')) . ' · ' . $typeLabel,
-            'confidence' => $ranked ? ((int) $article['evidence_confidence']) . '/100' : 'Source ' . $trust . '/5',
-            'confidence_title' => $ranked
-                ? 'Evidence score combines configured source trust and distinct-publisher corroboration. It is not a probability that the claim is true.'
-                : 'This is source-level trust before article-level evidence and corroboration are available.',
             'headline' => $article['title'],
             'summary' => $article['excerpt'] ?: 'This feed supplied no excerpt. Open the original source for the article details.',
-            'why' => $ranked
-                    ? ($article['deterministic_explanation'] ?? $article['why_selected'])
-                    : self::whyItAppears($type, (string) $article['source_name']),
-            'why_label' => $ranked ? 'Deterministic basis' : 'Why it appears',
             'source' => $article['source_name'] . ($article['author'] ? ' · ' . $article['author'] : ''),
             'published' => self::dateLabel($article['published_at']),
             'source_updated' => self::dateLabel($article['source_updated_at']),
             'retrieved' => self::dateLabel($article['last_retrieved_at']),
             'url' => $article['canonical_url'],
             'link_label' => 'Open original',
-            'rank_score' => $ranked ? (float) $article['deterministic_score'] : null,
-            'score_breakdown' => $ranked ? [
-                'Importance' => (int) $article['importance_score'],
-                'Relevance' => (int) $article['relevance_score'],
-                'Evidence' => (int) $article['evidence_confidence'],
-                'Practical' => (int) $article['practical_impact_score'],
-                'Novelty' => (int) $article['novelty_score'],
-            ] : [],
             'corroboration' => $ranked
                 ? match (true) {
                     $evidenceSourceCount > 1 => sprintf(
@@ -108,7 +91,6 @@ final class NewsPresenter
                 'trim',
                 explode(',', (string) ($article['topic_tags'] ?? '')),
             ))),
-            'deterministic_explanation' => $ranked ? ($article['deterministic_explanation'] ?? $article['why_selected']) : null,
             'business_angle' => null,
             'llm_model' => $llmCurrent ? $article['llm_model'] : null,
             'llm_reason_code' => $llmCurrent ? $article['why_selected'] : null,

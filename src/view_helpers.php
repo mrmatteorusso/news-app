@@ -20,11 +20,6 @@ function render_story(array $story, string $variant = ''): void
     <article class="<?= e($classes) ?>"<?= $articleId ? ' data-article-id="' . e($articleId) . '"' : '' ?>>
         <div class="story-card__meta-top">
             <span class="story-card__tag"><?= e($story['tag']) ?></span>
-            <?php if (!empty($story['confidence'])): ?>
-                <span class="confidence" title="<?= e($story['confidence_title'] ?? 'Confidence measures how complete and corroborated the available evidence is.') ?>">
-                    Evidence: <?= e($story['confidence']) ?>
-                </span>
-            <?php endif; ?>
         </div>
         <?php if (!empty($story['topic_tags'])): ?>
             <div class="topic-tags" aria-label="Topics">
@@ -33,34 +28,21 @@ function render_story(array $story, string $variant = ''): void
         <?php endif; ?>
         <h3><?= e($story['headline']) ?></h3>
         <p><?= e($story['summary']) ?></p>
-        <?php if (!empty($story['score_breakdown'])): ?>
-            <div class="score-strip" aria-label="Deterministic ranking score breakdown">
-                <span class="score-strip__total">Rank <?= e(number_format((float) $story['rank_score'], 1)) ?></span>
-                <?php foreach ($story['score_breakdown'] as $label => $score): ?>
-                    <span><small><?= e($label) ?></small> <?= e($score) ?></span>
-                <?php endforeach; ?>
-            </div>
+        <?php if (!empty($story['corroboration'])): ?>
             <p class="corroboration"><strong>Corroboration:</strong> <?= e($story['corroboration']) ?></p>
-            <?php if (!empty($story['related_links'])): ?>
-                <p class="related-links"><strong>Related reports:</strong>
-                    <?php foreach ($story['related_links'] as $related): ?>
-                        <a href="<?= e($related['url']) ?>" target="_blank" rel="noreferrer noopener" data-track-link><?= e($related['name']) ?></a>
-                    <?php endforeach; ?>
-                </p>
-            <?php endif; ?>
+        <?php endif; ?>
+        <?php if (!empty($story['related_links'])): ?>
+            <p class="related-links"><strong>Related reports:</strong>
+                <?php foreach ($story['related_links'] as $related): ?>
+                    <a href="<?= e($related['url']) ?>" target="_blank" rel="noreferrer noopener" data-track-link><?= e($related['name']) ?></a>
+                <?php endforeach; ?>
+            </p>
         <?php endif; ?>
         <?php if (!empty($story['llm_model'])): ?>
             <p class="intelligence-meta">
                 <strong>Gemma selected</strong>
                 <span>· <?= e($story['llm_reason_label'] ?? 'profile selection') ?> · <?= e($story['llm_model']) ?></span>
             </p>
-        <?php endif; ?>
-        <p class="why"><strong><?= e($story['why_label'] ?? 'Why it was chosen') ?>:</strong> <?= e($story['why']) ?></p>
-        <?php if (!empty($story['llm_model']) && !empty($story['deterministic_explanation'])): ?>
-            <details class="decision-trace">
-                <summary>Compare deterministic basis</summary>
-                <p><?= e($story['deterministic_explanation']) ?></p>
-            </details>
         <?php endif; ?>
         <div class="story-card__details">
             <span><?= e($story['source']) ?></span>
