@@ -4,7 +4,7 @@ A small, local-first dashboard designed to answer one question:
 
 > What happened that is important enough for me to know?
 
-Stage 5 provides a responsive interface, live cached finance data, keyless RSS/Atom ingestion for Breaking, Finance, Crypto, and AI, deterministic ranking and clustering, and a private Gemma 3 4B review through LM Studio. X, Italy, and local intelligence remain later stages.
+The completed local MVP provides a responsive interface, live cached finance data, keyless RSS/Atom ingestion for Breaking, Finance, Crypto, AI, Italy, and Alta Valtellina, deterministic ranking and clustering, and a private Gemma 3 4B review through LM Studio. X remains a clearly labelled discovery panel rather than a verified live-news source.
 
 ## Start locally
 
@@ -24,7 +24,7 @@ Stop it with:
 .\scripts\dashboard.ps1 stop
 ```
 
-Check the container with `./scripts/dashboard.ps1 status`. This project helper deliberately selects the working per-user Docker 4.88.1 installation because an obsolete Docker command is still present under `C:\Program Files` on this PC.
+Check the container with `./scripts/dashboard.ps1 status`. On this PC, the helper can select the working per-user Docker Desktop installation even if an obsolete Docker command remains under `C:\Program Files`.
 
 ## Technology
 
@@ -51,7 +51,7 @@ No API key is required for the Stage 2 providers. The Yahoo endpoint is unoffici
 ## Stage 3 news behaviour
 
 - Opening the dashboard reads SQLite immediately; it never waits for the internet before showing the last successful data.
-- The browser checks Breaking, Finance News, Crypto, and AI independently. Stale caches are prepared in the background at 15, 30, 45, and 45 minute intervals respectively.
+- The browser checks Breaking, Finance News, Crypto, AI, Italy, and My Area independently. Stale caches are prepared in the background after 15, 30, 45, 45, 60, and 60 minutes respectively.
 - A section's **Refresh** button forces only that section. Finance refreshes both its market providers and finance-news feeds. **Refresh all** starts each independent group.
 - Every refresh creates a batch row and one source-fetch row per configured feed, including HTTP result, accepted item count, and failure text.
 - PHP accepts only recent items with a title and valid HTTP link, removes common tracking parameters, converts feed HTML to plain text, and deduplicates canonical URLs.
@@ -70,7 +70,7 @@ The complete, reviewed source register is in [docs/SOURCES.md](docs/SOURCES.md),
 - PHP assigns a small controlled set of topic/entity tags. Categories remain the visible navigation and analytics groups; a single stored article may belong to more than one category.
 - Evidence improves only when a cluster contains distinct publishers. Repeated reports from one publisher do not inflate corroboration.
 - Primary sources are preferred as representatives when they are close to the highest-scoring report. Unsupported community signals and contrarian analysis cannot be promoted as facts.
-- Each selected card shows the full score breakdown, corroboration count, and deterministic reason. The dashboard has no five-item cap: all qualifying cluster representatives may appear up to the section display limit.
+- Reader-facing cards show source dates, retrieval time, corroboration, and related-report links without exposing internal numerical scores. The full score model remains on the Ranking Method page and in SQLite. The dashboard has no five-item cap: all qualifying cluster representatives may appear up to the section display limit.
 - Ranking runs, component scores, selection decisions, explanations, and cluster membership are stored durably in SQLite. If ranking fails, the previous successful ranked batch remains visible.
 
 The live thresholds, latest run counts, and evidence policy are visible at <http://localhost:8080/methodology.php>.
@@ -82,7 +82,7 @@ The live thresholds, latest run counts, and evidence policy are visible at <http
 - Gemma reviews up to ten highest-ranked event-cluster representatives per category, processed in chunks of eight and two. The full candidate set and 90-day archive remain in SQLite. Gemma sees the general Markdown profile, matching category profile, recent feedback, titles, short feed excerpts, source metadata, timestamps, score components, and corroboration counts. It does not browse websites or receive full article bodies.
 - Gemma is a selector, not a writer. For every candidate it returns only keep/reject plus one restricted reason code. Publisher titles and feed excerpts remain unchanged on the dashboard; Gemma does not generate summaries, prose explanations, tags, relevance scores, or business angles.
 - After validation, PHP applies a deterministic diversity guard: selected reports sharing an event term and a specific event anchor are reduced to the highest-ranked representative. This compensates for small models occasionally retaining secondary angles despite the prompt.
-- The original deterministic reason remains inspectable. Each card can be marked **Useful**, **Too minor**, **Wrong category**, or **Not useful**; this append-only feedback becomes soft guidance on the next review.
+- Each card can be marked **Useful**, **Too minor**, **Wrong category**, or **Not useful**; this append-only feedback becomes soft guidance on the next review. Deterministic scores and explanations remain stored for diagnostics but do not clutter reader-facing cards.
 - A profile edit changes its hash and automatically makes the old AI review stale. The deterministic briefing remains visible until Gemma completes a review under the new profile.
 - If LM Studio is closed, the model is missing, a request times out, or the output is malformed, no partial AI data is published. The last valid AI briefing is retained when one exists; otherwise all deterministic Stage 4 survivors remain visible.
 
